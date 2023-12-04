@@ -78,6 +78,11 @@ class LRURP(BaseReplacementPolicy):
     cxx_class = "gem5::replacement_policy::LRU"
     cxx_header = "mem/cache/replacement_policies/lru_rp.hh"
 
+class HAWKEYERP(BaseReplacementPolicy):
+    type = "HAWKEYERP"
+    cxx_class = "gem5::replacement_policy::HAWKEYE"
+    cxx_header = "mem/cache/replacement_policies/hawkeye_rp.hh"
+
 
 class BIPRP(LRURP):
     type = "BIPRP"
