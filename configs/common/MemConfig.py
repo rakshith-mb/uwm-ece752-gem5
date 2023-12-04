@@ -235,6 +235,9 @@ def config_mem(options, system):
                         "latency to 1ns."
                     )
 
+                mem_ctrl.tCL = '125ns'
+                mem_ctrl.tRCD = '125ns'
+
                 # Create the controller that will drive the interface
                 mem_ctrl = dram_intf.controller()
 

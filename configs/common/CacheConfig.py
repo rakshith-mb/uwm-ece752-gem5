@@ -40,6 +40,7 @@
 # Configure the M5 cache hierarchy config in one place
 #
 
+import sys
 import m5
 from m5.objects import *
 from gem5.isas import ISA
@@ -110,10 +111,11 @@ def config_cache(options, system):
             None,
         )
     else:
-        dcache_class, icache_class, l2_cache_class, walk_cache_class = (
+        dcache_class, icache_class, l2_cache_class, l3_cache_class, walk_cache_class = (
             L1_DCache,
             L1_ICache,
             L2Cache,
+            L3Cache,
             None,
         )
 
@@ -130,25 +132,39 @@ def config_cache(options, system):
     if options.l2cache and options.elastic_trace_en:
         fatal("When elastic trace is enabled, do not configure L2 caches.")
 
-    if options.l2cache:
+    # Adding L3 Cache
+    if options.l2cache and options.l3cache:
         # Provide a clock for the L2 and the L1-to-L2 bus here as they
         # are not connected using addTwoLevelCacheHierarchy. Use the
         # same clock as the CPUs.
         system.l2 = l2_cache_class(
-            clk_domain=system.cpu_clk_domain, **_get_cache_opts("l2", options)
+            clk_domain=system.cpu_clk_domain, **_get_cache_opts("l2", options), clusivity = 'mostly_excl'
         )
 
+        system.l3 = l3_cache_class(clk_domain=system.cpu_clk_domain, **_get_cache_opts("l2", options), clusivity = 'mostly_excl')
+
+        if options.l3cache:
+            opt =  {'drrip': DRRIPRP,
+                    'lru':LRURP,
+                    'brrip':BRRIPRP,
+                    'srrip':RRIPRP,
+                    'ship':SHiPRP} 
+            setattr(system.l3,'replacement_policy',opt[options.l3_repl]())
+
         system.tol2bus = L2XBar(clk_domain=system.cpu_clk_domain)
+        system.tol3bus = L3XBar(clk_domain = system.cpu_clk_domain)
         system.l2.cpu_side = system.tol2bus.mem_side_ports
-        system.l2.mem_side = system.membus.cpu_side_ports
+        system.l2.mem_side = system.tol3bus.cpu_side_ports
+        system.l3.cpu_side = system.tol3bus.mem_side_ports
+        system.l3.mem_side = system.membus.cpu_side_ports
 
     if options.memchecker:
         system.memchecker = MemChecker()
 
     for i in range(options.num_cpus):
         if options.caches:
-            icache = icache_class(**_get_cache_opts("l1i", options))
-            dcache = dcache_class(**_get_cache_opts("l1d", options))
+            icache = icache_class(**_get_cache_opts("l1i", options), clusivity = 'mostly_excl')
+            dcache = dcache_class(**_get_cache_opts("l1d", options), clusivity = 'mostly_excl')
 
             # If we have a walker cache specified, instantiate two
             # instances here

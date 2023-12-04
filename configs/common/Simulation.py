@@ -762,6 +762,9 @@ def run(options, root, testsys, cpu_class):
                 "Simulation ends instruction count:%d"
                 % (testsys.switch_cpus_1[0].max_insts_any_thread)
             )
+            print("Dumping and resetting stats!")
+            m5.stats.dump()
+            m5.stats.reset()
             m5.switchCpus(testsys, switch_cpu_list1)
 
     # If we're taking and restoring checkpoints, use checkpoint_dir
