@@ -87,8 +87,8 @@ class Hawkeye : public SHiP
     std::vector<SatCounter8> demand_SHCT;
 
     // Hawkeye implementation requirements : OPTGen, addr_history, perset_timer 
-    std::map<uint64_t, OPTgen>              perset_optgen; //OPTGen Structure
-    std::map<uint64_t, unsigned short int>  perset_timer;  //holds the timestamp of access in a per set basis
+    std::vector<OPTgen>                     perset_optgen; //OPTGen Structure
+    std::vector<uint64_t>                   perset_timer;  //holds the timestamp of access in a per set basis
     std::vector<map<uint64_t, ADDR_INFO> >  addr_history;  //addr_history is an array tag and ADDR_INFO. It is a part of the sampled cache design
 
     /**
