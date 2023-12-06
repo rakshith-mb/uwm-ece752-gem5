@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2018-2020 Inria
+ * Copyright (c) 2019, 2020 Inria
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -28,46 +28,100 @@
 
 /**
  * @file
- * Declaration of a Least Recently Used replacement policy.
- * The victim is chosen using the last touch timestamp.
+ * Declaration of a the Hawkeye Replacement Policy, as described in "Hawkeye:
+ * Signature-based Hit Predictor for High Performance Caching", by
+ * Wu et al.
  */
 
-#ifndef __MEM_CACHE_REPLACEMENT_POLICIES_HAWKEYE_RP_HH__
-#define __MEM_CACHE_REPLACEMENT_POLICIES_HAWKEYE_RP_HH__
+#ifndef __MEM_CACHE_REPLACEMENT_POLICIES_SHIP_RP_HH__
+#define __MEM_CACHE_REPLACEMENT_POLICIES_SHIP_RP_HH__
 
-#include "mem/cache/replacement_policies/base.hh"
+#include <cstddef>
+#include <vector>
+
+#include "base/compiler.hh"
+#include "base/sat_counter.hh"
+#include "mem/cache/replacement_policies/ship_rp.hh"
+#include "mem/packet.hh"
 
 namespace gem5
 {
 
-struct LRURPParams;
+struct HawkeyeRPParams;
+struct HawkeyeMemRPParams;
+struct HawkeyePCRPParams;
 
 namespace replacement_policy
 {
 
-class HAWKEYE : public Base
+class Hawkeye : public SHiP
 {
   protected:
-    /** LRU-specific implementation of replacement data. */
-    struct LRUReplData : ReplacementData
+    typedef std::size_t SignatureType;
+
+    /** Hawkeye-specific implementation of replacement data. */
+    class HawkeyeReplData : public SHiPReplData
     {
-        /** Tick on which the entry was last touched. */
-        Tick lastTouchTick;
+      private:
+        /** Signature that caused the insertion of this entry. */
+        SignatureType signature;
+
+        /** Outcome of insertion; set to one if entry is re-referenced. */
+        bool outcome;
+
+      public:
+        HawkeyeReplData(int num_bits);
+
+        /** Get entry's signature. */
+        SignatureType getSignature() const;
 
         /**
-         * Default constructor. Invalidate data.
+         * Set this entry's signature and reset outcome.
+         *
+         * @param signature New signature value/
          */
-        LRUReplData() : lastTouchTick(0) {}
+        void setSignature(SignatureType signature);
+
+        /** Set that this entry has been re-referenced. */
+        void setReReferenced();
+
+        /**
+         * Get whether entry has been re-referenced since insertion.
+         *
+         * @return True if entry has been re-referenced since insertion.
+         */
+        bool wasReReferenced() const;
     };
 
+    /**
+     * Saturation percentage at which an entry starts being inserted as
+     * intermediate re-reference.
+     */
+    const double insertionThreshold;
+
+    /**
+     * Signature History Counter Table; learns the re-reference behavior
+     * of a signature. A zero entry provides a strong indication that
+     * future lines brought by that signature will not receive any hits.
+     */
+    std::vector<SatCounter8> SHCT;
+
+    /**
+     * Extract signature from packet.
+     *
+     * @param pkt The packet to extract a signature from.
+     * @return The signature extracted.
+     */
+    virtual SignatureType getSignature(const PacketPtr pkt) const = 0;
+
   public:
-    typedef LRURPParams Params;
-    HAWKEYE(const Params &p);
-    ~HAWKEYE() = default;
+    typedef HawkeyeRPParams Params;
+    Hawkeye(const Params &p);
+    ~Hawkeye() = default;
 
     /**
      * Invalidate replacement data to set it as the next probable victim.
-     * Sets its last touch tick as the starting tick.
+     * Updates predictor and invalidate data.
      *
      * @param replacement_data Replacement data to be invalidated.
      */
@@ -76,30 +130,27 @@ class HAWKEYE : public Base
 
     /**
      * Touch an entry to update its replacement data.
-     * Sets its last touch tick as the current tick.
+     * Updates predictor and assigns RRPV values of Table 3.
      *
      * @param replacement_data Replacement data to be touched.
+     * @param pkt Packet that generated this hit.
      */
+    void touch(const std::shared_ptr<ReplacementData>& replacement_data,
+        const PacketPtr pkt) override;
     void touch(const std::shared_ptr<ReplacementData>& replacement_data) const
-                                                                     override;
+        override;
 
     /**
      * Reset replacement data. Used when an entry is inserted.
-     * Sets its last touch tick as the current tick.
+     * Updates predictor and assigns RRPV values of Table 3.
      *
      * @param replacement_data Replacement data to be reset.
+     * @param pkt Packet that generated this miss.
      */
+    void reset(const std::shared_ptr<ReplacementData>& replacement_data,
+        const PacketPtr pkt) override;
     void reset(const std::shared_ptr<ReplacementData>& replacement_data) const
-                                                                     override;
-
-    /**
-     * Find replacement victim using LRU timestamps.
-     *
-     * @param candidates Replacement candidates, selected by indexing policy.
-     * @return Replacement entry to be replaced.
-     */
-    ReplaceableEntry* getVictim(const ReplacementCandidates& candidates) const
-                                                                     override;
+        override;
 
     /**
      * Instantiate a replacement data entry.
@@ -109,7 +160,33 @@ class HAWKEYE : public Base
     std::shared_ptr<ReplacementData> instantiateEntry() override;
 };
 
+/** Hawkeye that Uses memory addresses as signatures. */
+class HawkeyeMem : public Hawkeye
+{
+  protected:
+    SignatureType getSignature(const PacketPtr pkt) const override;
+
+  public:
+    HawkeyeMem(const HawkeyeMemRPParams &p);
+    ~HawkeyeMem() = default;
+};
+
+/** Hawkeye that Uses PCs as signatures. */
+class HawkeyePC : public Hawkeye
+{
+  private:
+    /** Signature to be used when no PC is provided in an access. */
+    const SignatureType NO_PC_SIGNATURE = 0;
+
+  protected:
+    SignatureType getSignature(const PacketPtr pkt) const override;
+
+  public:
+    HawkeyePC(const HawkeyePCRPParams &p);
+    ~HawkeyePC() = default;
+};
+
 } // namespace replacement_policy
 } // namespace gem5
 
-#endif // __MEM_CACHE_REPLACEMENT_POLICIES_HAWKEYE_RP_HH__
+#endif // __MEM_CACHE_REPLACEMENT_POLICIES_SHIP_RP_HH__
