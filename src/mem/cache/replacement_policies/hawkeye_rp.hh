@@ -44,6 +44,16 @@
 #include "mem/cache/replacement_policies/ship_rp.hh"
 #include "mem/packet.hh"
 
+// Hawkeye OPTGen
+#include "optgen.h"
+
+// defines Hawkeye
+#define MAX_SHCT 31
+#define SHCT_SIZE_BITS 13 
+#define SHCT_SIZE (1<<SHCT_SIZE_BITS)
+#define TIMER_SIZE 1024
+#define maxRRPV 7
+
 namespace gem5
 {
 
@@ -103,8 +113,16 @@ class Hawkeye : public SHiP
      * Signature History Counter Table; learns the re-reference behavior
      * of a signature. A zero entry provides a strong indication that
      * future lines brought by that signature will not receive any hits.
+
+     demand_SHCT - demand based accesses only. 
+     Prefetcher accesses to be covered later in this project (Hopefully :P)
      */
-    std::vector<SatCounter8> SHCT;
+    std::vector<SatCounter8> demand_SHCT;
+
+    // Hawkeye implementation requirements : OPTGen, addr_history, perset_timer 
+    std::map<uint64_t, OPTgen>              perset_optgen; //OPTGen Structure
+    std::map<uint64_t, unsigned short int>  perset_timer;  //holds the timestamp of access in a per set basis
+    std::vector<map<uint64_t, ADDR_INFO> >  addr_history;  //addr_history is an array tag and ADDR_INFO. It is a part of the sampled cache design
 
     /**
      * Extract signature from packet.
@@ -132,7 +150,7 @@ class Hawkeye : public SHiP
      * Touch an entry to update its replacement data.
      * Updates predictor and assigns RRPV values of Table 3.
      *
-     * @param replacement_data Replacement data to be touched.
+     * @param replacement_data  Replacement data to be touched.
      * @param pkt Packet that generated this hit.
      */
     void touch(const std::shared_ptr<ReplacementData>& replacement_data,
@@ -158,6 +176,15 @@ class Hawkeye : public SHiP
      * @return A shared pointer to the new replacement data.
      */
     std::shared_ptr<ReplacementData> instantiateEntry() override;
+
+    // increments the trainer Signature indexed counter value
+    void demand_SHCT_increment (uint64_t pc);
+
+    // decrement the trainer Signature indexed counter value
+    void demand_SHCT_decrement (uint64_t pc);
+
+    // gets the prediction from the counter value indexed through the signature
+    bool demand_SHCT_get_prediction (uint64_t pc);
 };
 
 /** Hawkeye that Uses memory addresses as signatures. */
@@ -190,3 +217,5 @@ class HawkeyePC : public Hawkeye
 } // namespace gem5
 
 #endif // __MEM_CACHE_REPLACEMENT_POLICIES_SHIP_RP_HH__
+
+

@@ -171,5 +171,44 @@ HawkeyePC::getSignature(const PacketPtr pkt) const
     return signature % SHCT.size();
 }
 
+// Hashing function to index into demand_SHCT structure- 
+//      see if it is required. 
+//      SHiP does not have any hashing to index into SCHT structure
+uint64_t CRC( uint64_t _blockAddress )
+{
+    static const unsigned long long crcPolynomial = 3988292384ULL;
+    unsigned long long _returnVal = _blockAddress;
+    for( unsigned int i = 0; i < 32; i++ )
+        _returnVal = ( ( _returnVal & 1 ) == 1 ) ? ( ( _returnVal >> 1 ) ^ crcPolynomial ) : ( _returnVal >> 1 );
+    return _returnVal;
+}
+
+void Hawkeye::demand_SHCT_increment (uint64_t pc)
+{
+    uint64_t signature = CRC(pc) % SHCT_SIZE;
+    if(demand_SHCT.find(signature) == demand_SHCT.end())
+        demand_SHCT[signature] = (1+MAX_SHCT)/2;
+
+    demand_SHCT[signature] = (demand_SHCT[signature] < MAX_SHCT) ? (demand_SHCT[signature]+1) : MAX_SHCT;
+}
+
+void Hawkeye::demand_SHCT_decrement (uint64_t pc)
+{
+    uint64_t signature = CRC(pc) % SHCT_SIZE;
+    if(demand_SHCT.find(signature) == demand_SHCT.end())
+        demand_SHCT[signature] = (1+MAX_SHCT)/2;
+    if(demand_SHCT[signature] != 0)
+        demand_SHCT[signature] = demand_SHCT[signature]-1;
+}
+
+bool Hawkeye::demand_SHCT_get_prediction (uint64_t pc)
+{
+    uint64_t signature = CRC(pc) % SHCT_SIZE;
+    if(demand_SHCT.find(signature) != demand_SHCT.end() && demand_SHCT[signature] < ((MAX_SHCT+1)/2))
+        return false;
+    return true;
+}
+
+
 } // namespace replacement_policy
 } // namespace gem5
