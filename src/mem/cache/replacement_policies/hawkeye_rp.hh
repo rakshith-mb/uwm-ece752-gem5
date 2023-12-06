@@ -54,6 +54,12 @@
 #define TIMER_SIZE 1024
 #define maxRRPV 7
 
+// Sampler to track 8x cache history for sampled sets
+// 2800 entris * 4 bytes per entry = 11.2KB
+#define SAMPLED_CACHE_SIZE 2800
+#define SAMPLER_WAYS 8
+#define SAMPLER_SETS SAMPLED_CACHE_SIZE/SAMPLER_WAYS
+
 namespace gem5
 {
 

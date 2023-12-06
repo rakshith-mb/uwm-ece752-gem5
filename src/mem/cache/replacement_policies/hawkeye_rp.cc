@@ -71,8 +71,20 @@ Hawkeye::HawkeyeReplData::wasReReferenced() const
 
 Hawkeye::Hawkeye(const Params &p)
   : BRRIP(p), insertionThreshold(p.insertion_threshold / 100.0),
-    SHCT(p.shct_size, SatCounter8(numRRPVBits))
+    demand_SHCT(p.shct_size, SatCounter8(numRRPVBits)),
+    perset_optgen(p.NUM_SETS),
+    perset_timer(p.NUM_SETS,0) // creating NUM_SETS entries with initial value as 0
 {
+    // We are going to assume that Params has a field called 
+    //          1. NUM_SETS which says the total number of sets
+    //          2. NUM_WAYS which says the total number of ways
+    for(int i=0;i<p.NUM_SETS;i++){
+        perset_optgen[i].init(p.NUM_WAYS-2)
+    }
+
+    addr_history.resize(SAMPLER_SETS);
+    for (int i=0; i<SAMPLER_SETS; i++) 
+        addr_history[i].clear();
 }
 
 void
