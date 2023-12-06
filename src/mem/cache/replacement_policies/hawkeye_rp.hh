@@ -72,42 +72,9 @@ class Hawkeye : public SHiP
     /** Hawkeye-specific implementation of replacement data. */
     class HawkeyeReplData : public SHiPReplData
     {
-      private:
-        /** Signature that caused the insertion of this entry. */
-        SignatureType signature;
-
-        /** Outcome of insertion; set to one if entry is re-referenced. */
-        bool outcome;
-
       public:
         HawkeyeReplData(int num_bits);
-
-        /** Get entry's signature. */
-        SignatureType getSignature() const;
-
-        /**
-         * Set this entry's signature and reset outcome.
-         *
-         * @param signature New signature value/
-         */
-        void setSignature(SignatureType signature);
-
-        /** Set that this entry has been re-referenced. */
-        void setReReferenced();
-
-        /**
-         * Get whether entry has been re-referenced since insertion.
-         *
-         * @return True if entry has been re-referenced since insertion.
-         */
-        bool wasReReferenced() const;
     };
-
-    /**
-     * Saturation percentage at which an entry starts being inserted as
-     * intermediate re-reference.
-     */
-    const double insertionThreshold;
 
     /**
      * Signature History Counter Table; learns the re-reference behavior
@@ -198,7 +165,9 @@ class HawkeyeMem : public Hawkeye
     ~HawkeyeMem() = default;
 };
 
-/** Hawkeye that Uses PCs as signatures. */
+/** Hawkeye that Uses PCs as signatures. 
+    rsuresh6 - I think we need this but Idk how we can use this :| 
+    first line comment was already present and was not added by me*/
 class HawkeyePC : public Hawkeye
 {
   private:
