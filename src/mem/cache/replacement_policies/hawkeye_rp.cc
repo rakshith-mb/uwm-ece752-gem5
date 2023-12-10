@@ -33,6 +33,14 @@
 #include "params/HawkeyePCRP.hh"
 #include "params/HawkeyeRP.hh"
 
+#define CACHE_HIT   1
+#define CACHE_MISS  0
+
+#define DEMAND      8
+#define PREFETCH    9
+#define WRITEBACK   10
+#define SAMPLED_SET(set) (bits(set, 0 , 6) == bits(set, ((unsigned long long)log2(LLC_SETS) - 6), 6) )
+
 namespace gem5
 {
 
@@ -109,13 +117,18 @@ Hawkeye::touch(const std::shared_ptr<ReplacementData>& replacement_data,
     std::shared_ptr<HawkeyeReplData> casted_replacement_data =
         std::static_pointer_cast<HawkeyeReplData>(replacement_data);
 
+    // Get signature
+    const SignatureType signature = getSignature(pkt);
+
     // When a hit happens the SHCT entry indexed by the signature is
     // incremented
-    SHCT[getSignature(pkt)]++;
+    SHCT[signature]++;
     casted_replacement_data->setReReferenced();
 
-    // This was a hit; update replacement data accordingly
-    BRRIP::touch(replacement_data);
+    UpdateReplacementState(casted_replacement_data->getSet(), casted_replacement_data->getWay(), pkt->getAddr(), signature, DEMAND, CACHE_HIT);
+
+    // // This was a hit; update replacement data accordingly
+    // BRRIP::touch(replacement_data);
 }
 
 void
@@ -138,12 +151,14 @@ Hawkeye::reset(const std::shared_ptr<ReplacementData>& replacement_data,
     // Store signature
     casted_replacement_data->setSignature(signature);
 
+    UpdateReplacementState(casted_replacement_data->getSet(), casted_replacement_data->getWay(), pkt->getAddr(), signature, DEMAND, CACHE_MISS);
+
     // If SHCT for signature is set, predict intermediate re-reference.
     // Predict distant re-reference otherwise
-    BRRIP::reset(replacement_data);
-    if (SHCT[signature].calcSaturation() >= insertionThreshold) {
-        casted_replacement_data->rrpv--;
-    }
+    // BRRIP::reset(replacement_data);
+    // if (SHCT[signature].calcSaturation() >= insertionThreshold) {
+    //     casted_replacement_data->rrpv--;
+    // }
 }
 
 void
@@ -186,7 +201,7 @@ HawkeyePC::getSignature(const PacketPtr pkt) const
 // Hashing function to index into demand_SHCT structure- 
 //      see if it is required. 
 //      SHiP does not have any hashing to index into SCHT structure
-uint64_t CRC( uint64_t _blockAddress )
+uint64_t Hawkeye::CRC( uint64_t _blockAddress )
 {
     static const unsigned long long crcPolynomial = 3988292384ULL;
     unsigned long long _returnVal = _blockAddress;
@@ -219,6 +234,151 @@ bool Hawkeye::demand_SHCT_get_prediction (uint64_t pc)
     if(demand_SHCT.find(signature) != demand_SHCT.end() && demand_SHCT[signature] < ((MAX_SHCT+1)/2))
         return false;
     return true;
+}
+
+// called on every cache hit and cache fill
+void Hawkeye::UpdateReplacementState (uint32_t set, uint32_t way, uint64_t paddr, uint64_t PC, uint32_t type, uint8_t hit)
+{
+    paddr = (paddr >> 6) << 6;
+
+    if(type == PREFETCH)
+    {
+        if (!hit)
+            prefetched[set][way] = true;
+    }
+    else
+        prefetched[set][way] = false;
+
+    //Ignore writebacks
+    if (type == WRITEBACK)
+        return;
+
+
+    //If we are sampling, OPTgen will only see accesses from sampled sets
+    if(SAMPLED_SET(set))
+    {
+        //The current timestep 
+        uint64_t curr_quanta = perset_mytimer[set] % OPTGEN_VECTOR_SIZE;  //rsuresh6 the current timestamp - the current index 
+
+        uint32_t sampler_set = (paddr >> 6) % SAMPLER_SETS;  // rsuresh6  will give which set we need to look at 
+        uint64_t sampler_tag = CRC(paddr >> 12) % 256;       // rsuresh6  tag of the address
+        assert(sampler_set < SAMPLER_SETS); 
+
+        // This line has been used before. Since the right end of a usage interval is always 
+        //a demand, ignore prefetches
+        if((addr_history[sampler_set].find(sampler_tag) != addr_history[sampler_set].end()) && (type != PREFETCH))// rsuresh6  will check if sampler_tag is present in the address history - if not present then we cannot 
+        {
+            unsigned int curr_timer = perset_mytimer[set];
+            if(curr_timer < addr_history[sampler_set][sampler_tag].last_quanta)
+               curr_timer = curr_timer + TIMER_SIZE;
+            bool wrap =  ((curr_timer - addr_history[sampler_set][sampler_tag].last_quanta) > OPTGEN_VECTOR_SIZE);
+            uint64_t last_quanta = addr_history[sampler_set][sampler_tag].last_quanta % OPTGEN_VECTOR_SIZE;
+            //and for prefetch hits, we train the last prefetch trigger PC
+            if( !wrap && perset_optgen[set].should_cache(curr_quanta, last_quanta))
+            {
+                if(addr_history[sampler_set][sampler_tag].prefetched)
+                    prefetch_SHCT.increment(addr_history[sampler_set][sampler_tag].PC);
+                else
+                    demand_SHCT.increment(addr_history[sampler_set][sampler_tag].PC);
+            }
+            else
+            {
+                //Train the predictor negatively because OPT would not have cached this line
+                if(addr_history[sampler_set][sampler_tag].prefetched)
+                    prefetch_SHCT.decrement(addr_history[sampler_set][sampler_tag].PC);
+                else
+                    demand_SHCT.decrement(addr_history[sampler_set][sampler_tag].PC);
+            }
+            //Some maintenance operations for OPTgen
+            perset_optgen[set].add_access(curr_quanta);
+            update_addr_history_lru(sampler_set, addr_history[sampler_set][sampler_tag].lru);
+
+            //Since this was a demand access, mark the prefetched bit as false
+            addr_history[sampler_set][sampler_tag].prefetched = false;
+        }
+        // This is the first time we are seeing this line (could be demand or prefetch)
+        else if(addr_history[sampler_set].find(sampler_tag) == addr_history[sampler_set].end())
+        {
+            // Find a victim from the sampled cache if we are sampling
+            if(addr_history[sampler_set].size() == SAMPLER_WAYS) 
+                replace_addr_history_element(sampler_set);
+
+            assert(addr_history[sampler_set].size() < SAMPLER_WAYS);
+            //Initialize a new entry in the sampler
+            addr_history[sampler_set][sampler_tag].init(curr_quanta);
+            //If it's a prefetch, mark the prefetched bit;
+            if(type == PREFETCH)
+            {
+                addr_history[sampler_set][sampler_tag].mark_prefetch();
+                perset_optgen[set].add_prefetch(curr_quanta);
+            }
+            else
+                perset_optgen[set].add_access(curr_quanta);
+            update_addr_history_lru(sampler_set, SAMPLER_WAYS-1);
+        }
+        else //This line is a prefetch
+        {
+            assert(addr_history[sampler_set].find(sampler_tag) != addr_history[sampler_set].end());
+            //if(hit && prefetched[set][way])
+            uint64_t last_quanta = addr_history[sampler_set][sampler_tag].last_quanta % OPTGEN_VECTOR_SIZE;
+            if (perset_mytimer[set] - addr_history[sampler_set][sampler_tag].last_quanta < 5*NUM_CORE) 
+            {
+                if(perset_optgen[set].should_cache(curr_quanta, last_quanta))
+                {
+                    if(addr_history[sampler_set][sampler_tag].prefetched)
+                        prefetch_SHCT.increment(addr_history[sampler_set][sampler_tag].PC);
+                    else
+                       demand_SHCT.increment(addr_history[sampler_set][sampler_tag].PC);
+                }
+            }
+
+            //Mark the prefetched bit
+            addr_history[sampler_set][sampler_tag].mark_prefetch(); 
+            //Some maintenance operations for OPTgen
+            perset_optgen[set].add_prefetch(curr_quanta);
+            update_addr_history_lru(sampler_set, addr_history[sampler_set][sampler_tag].lru);
+        }
+
+        // Get Hawkeye's prediction for this line
+        bool new_prediction = demand_SHCT.get_prediction (PC);
+        if (type == PREFETCH)
+            new_prediction = prefetch_SHCT.get_prediction (PC);
+        // Update the sampler with the timestamp, PC and our prediction
+        // For prefetches, the PC will represent the trigger PC
+        addr_history[sampler_set][sampler_tag].update(perset_mytimer[set], PC, new_prediction);
+        addr_history[sampler_set][sampler_tag].lru = 0;
+        //Increment the set timer
+        perset_mytimer[set] = (perset_mytimer[set]+1) % TIMER_SIZE;
+    }
+
+    bool new_prediction = demand_SHCT.get_prediction (PC);
+    if (type == PREFETCH)
+        new_prediction = prefetch_SHCT.get_prediction (PC);
+
+    signatures[set][way] = PC;
+
+    //Set RRIP values and age cache-friendly line
+    if(!new_prediction)
+        rrpv[set][way] = maxRRPV;
+    else
+    {
+        rrpv[set][way] = 0;
+        if(!hit)
+        {
+            bool saturated = false;
+            for(uint32_t i=0; i<LLC_WAYS; i++)
+                if (rrpv[set][i] == maxRRPV-1)
+                    saturated = true;
+
+            //Age all the cache-friendly  lines
+            for(uint32_t i=0; i<LLC_WAYS; i++)
+            {
+                if (!saturated && rrpv[set][i] < maxRRPV-1)
+                    rrpv[set][i]++;
+            }
+        }
+        rrpv[set][way] = 0;
+    }
 }
 
 

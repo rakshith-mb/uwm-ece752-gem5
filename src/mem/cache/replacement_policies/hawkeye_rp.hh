@@ -41,7 +41,7 @@
 
 #include "base/compiler.hh"
 #include "base/sat_counter.hh"
-#include "mem/cache/replacement_policies/ship_rp.hh"
+#include "mem/cache/replacement_policies/brrip_rp.hh"
 #include "mem/packet.hh"
 
 // Hawkeye OPTGen
@@ -70,13 +70,13 @@ struct HawkeyePCRPParams;
 namespace replacement_policy
 {
 
-class Hawkeye : public SHiP
+class Hawkeye : public BRRIP
 {
   protected:
     typedef std::size_t SignatureType;
 
     /** Hawkeye-specific implementation of replacement data. */
-    class HawkeyeReplData : public SHiPReplData
+    class HawkeyeReplData : public BRRIPReplData
     {
       public:
         HawkeyeReplData(int num_bits);
@@ -91,7 +91,8 @@ class Hawkeye : public SHiP
      Prefetcher accesses to be covered later in this project (Hopefully :P)
      */
     std::vector<SatCounter8> demand_SHCT;
-
+    std::vector<SatCounter8> prefetch_SHCT;
+  
     // Hawkeye implementation requirements : OPTGen, addr_history, perset_timer 
     std::vector<OPTgen>                     perset_optgen; //OPTGen Structure
     std::vector<uint64_t>                   perset_timer;  //holds the timestamp of access in a per set basis
@@ -158,34 +159,6 @@ class Hawkeye : public SHiP
 
     // gets the prediction from the counter value indexed through the signature
     bool demand_SHCT_get_prediction (uint64_t pc);
-};
-
-/** Hawkeye that Uses memory addresses as signatures. */
-class HawkeyeMem : public Hawkeye
-{
-  protected:
-    SignatureType getSignature(const PacketPtr pkt) const override;
-
-  public:
-    HawkeyeMem(const HawkeyeMemRPParams &p);
-    ~HawkeyeMem() = default;
-};
-
-/** Hawkeye that Uses PCs as signatures. 
-    rsuresh6 - I think we need this but Idk how we can use this :| 
-    first line comment was already present and was not added by me*/
-class HawkeyePC : public Hawkeye
-{
-  private:
-    /** Signature to be used when no PC is provided in an access. */
-    const SignatureType NO_PC_SIGNATURE = 0;
-
-  protected:
-    SignatureType getSignature(const PacketPtr pkt) const override;
-
-  public:
-    HawkeyePC(const HawkeyePCRPParams &p);
-    ~HawkeyePC() = default;
 };
 
 } // namespace replacement_policy

@@ -78,11 +78,6 @@ class LRURP(BaseReplacementPolicy):
     cxx_class = "gem5::replacement_policy::LRU"
     cxx_header = "mem/cache/replacement_policies/lru_rp.hh"
 
-class HAWKEYERP(BaseReplacementPolicy):
-    type = "HAWKEYERP"
-    cxx_class = "gem5::replacement_policy::HAWKEYE"
-    cxx_header = "mem/cache/replacement_policies/hawkeye_rp.hh"
-
 
 class BIPRP(LRURP):
     type = "BIPRP"
@@ -139,6 +134,21 @@ class NRURP(BRRIPRP):
     btp = 100
     num_bits = 1
 
+class HAWKEYERP(BRRIPRP):
+    type = "HAWKEYERP"
+    abstract = True
+    cxx_class = "gem5::replacement_policy::HAWKEYERP"
+    cxx_header = "mem/cache/replacement_policies/hawkeye_rp.hh"
+
+    shct_size = Param.Unsigned(16384, "Number of SHCT entries")
+    # By default any value greater than 0 is enough to change insertion policy
+    insertion_threshold = Param.Percent(
+        1, "Percentage at which an entry changes insertion policy"
+    )
+    # Always make hits mark entries as last to be evicted
+    hit_priority = True
+    # Let the predictor decide when to change insertion policy
+    btp = 0
 
 class SHiPRP(BRRIPRP):
     type = "SHiPRP"
