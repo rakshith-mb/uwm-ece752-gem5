@@ -1,6 +1,8 @@
+#define OPTGEN_VECTOR_SIZE 128
+
 struct OPTgen
 {
-    vector<unsigned int> liveness_history;
+    std::vector<uint64_t> liveness_history;
 
     uint64_t num_cache;
     uint64_t num_dont_cache;

@@ -29,8 +29,7 @@
 #include "mem/cache/replacement_policies/hawkeye_rp.hh"
 
 #include "base/logging.hh"
-#include "params/HawkeyeMemRP.hh"
-#include "params/HawkeyePCRP.hh"
+// #include "params/HawkeyeRP.hh"
 #include "params/HawkeyeRP.hh"
 
 #define CACHE_HIT   1
@@ -39,7 +38,9 @@
 #define DEMAND      8
 #define PREFETCH    9
 #define WRITEBACK   10
-#define SAMPLED_SET(set) (bits(set, 0 , 6) == bits(set, ((unsigned long long)log2(LLC_SETS) - 6), 6) )
+// #define SAMPLED_SET(set) (bits(set, 0 , 6) == bits(set, ((unsigned long long)log2(128) - 6), 6) ) // TO BE FIXED - changed this at 4:24 am with 0 sleep
+
+#define SAMPLED_SET(set) (bits(set, 0 , 6) == bits(set, ((unsigned long long)7 - 6), 6) ) // TO BE FIXED - changed this at 4:24 am with 0 sleep
 
 namespace gem5
 {
@@ -48,7 +49,7 @@ namespace replacement_policy
 {
 
 Hawkeye::HawkeyeReplData::HawkeyeReplData(int num_bits)
-  : BRRIPReplData(num_bits), signature(0), outcome(false)
+  : BRRIPReplData(num_bits), signature(0)
 {
 }
 
@@ -62,24 +63,11 @@ void
 Hawkeye::HawkeyeReplData::setSignature(SignatureType new_signature)
 {
     signature = new_signature;
-    outcome = false;
-}
-
-void
-Hawkeye::HawkeyeReplData::setReReferenced()
-{
-    outcome = true;
-}
-
-bool
-Hawkeye::HawkeyeReplData::wasReReferenced() const
-{
-    return outcome;
 }
 
 Hawkeye::Hawkeye(const Params &p)
   : BRRIP(p), insertionThreshold(p.insertion_threshold / 100.0),
-    demand_SHCT(p.shct_size, SatCounter8(numRRPVBits)),
+    demand_SHCT(p.shct_size, uint64_t(numRRPVBits)),
     perset_optgen(p.NUM_SETS),
     perset_timer(p.NUM_SETS,0) // creating NUM_SETS entries with initial value as 0
 {
@@ -87,7 +75,7 @@ Hawkeye::Hawkeye(const Params &p)
     //          1. NUM_SETS which says the total number of sets
     //          2. NUM_WAYS which says the total number of ways
     for(int i=0;i<p.NUM_SETS;i++){
-        perset_optgen[i].init(p.NUM_WAYS-2)
+        perset_optgen[i].init(p.NUM_WAYS-2);
     }
 
     addr_history.resize(SAMPLER_SETS);
@@ -101,18 +89,18 @@ Hawkeye::invalidate(const std::shared_ptr<ReplacementData>& replacement_data)
     std::shared_ptr<HawkeyeReplData> casted_replacement_data =
         std::static_pointer_cast<HawkeyeReplData>(replacement_data);
 
-    // The predictor is detrained when an entry that has not been re-
-    // referenced since insertion is invalidated
-    if (casted_replacement_data->wasReReferenced()) {
-        SHCT[casted_replacement_data->getSignature()]--;
-    }
+    // // The predictor is detrained when an entry that has not been re-
+    // // referenced since insertion is invalidated
+    // if (casted_replacement_data->wasReReferenced()) {
+    //     SHCT[casted_replacement_data->getSignature()]--;
+    // }
 
     BRRIP::invalidate(replacement_data);
 }
 
 void
 Hawkeye::touch(const std::shared_ptr<ReplacementData>& replacement_data,
-    const PacketPtr pkt)
+    const PacketPtr pkt, uint32_t set, uint32_t way)
 {
     std::shared_ptr<HawkeyeReplData> casted_replacement_data =
         std::static_pointer_cast<HawkeyeReplData>(replacement_data);
@@ -122,10 +110,9 @@ Hawkeye::touch(const std::shared_ptr<ReplacementData>& replacement_data,
 
     // When a hit happens the SHCT entry indexed by the signature is
     // incremented
-    SHCT[signature]++;
-    casted_replacement_data->setReReferenced();
+    // SHCT[signature]++;
 
-    UpdateReplacementState(casted_replacement_data->getSet(), casted_replacement_data->getWay(), pkt->getAddr(), signature, DEMAND, CACHE_HIT);
+    UpdateReplacementState(set, way, pkt->getAddr(), signature, DEMAND, CACHE_HIT);
 
     // // This was a hit; update replacement data accordingly
     // BRRIP::touch(replacement_data);
@@ -151,12 +138,12 @@ Hawkeye::reset(const std::shared_ptr<ReplacementData>& replacement_data,
     // Store signature
     casted_replacement_data->setSignature(signature);
 
-    UpdateReplacementState(casted_replacement_data->getSet(), casted_replacement_data->getWay(), pkt->getAddr(), signature, DEMAND, CACHE_MISS);
+    UpdateReplacementState(curr_set, curr_way, pkt->getAddr(), signature, DEMAND, CACHE_MISS);
 
     // If SHCT for signature is set, predict intermediate re-reference.
     // Predict distant re-reference otherwise
     // BRRIP::reset(replacement_data);
-    // if (SHCT[signature].calcSaturation() >= insertionThreshold) {
+    // if (SHCT[signature].calcSaturation() >=  ) {
     //     casted_replacement_data->rrpv--;
     // }
 }
@@ -174,30 +161,6 @@ Hawkeye::instantiateEntry()
     return std::shared_ptr<ReplacementData>(new HawkeyeReplData(numRRPVBits));
 }
 
-HawkeyeMem::HawkeyeMem(const HawkeyeMemRPParams &p) : Hawkeye(p) {}
-
-Hawkeye::SignatureType
-HawkeyeMem::getSignature(const PacketPtr pkt) const
-{
-    return static_cast<SignatureType>(pkt->getAddr() % SHCT.size());
-}
-
-HawkeyePC::HawkeyePC(const HawkeyePCRPParams &p) : Hawkeye(p) {}
-
-Hawkeye::SignatureType
-HawkeyePC::getSignature(const PacketPtr pkt) const
-{
-    SignatureType signature;
-
-    if (pkt->req->hasPC()) {
-        signature = static_cast<SignatureType>(pkt->req->getPC());
-    } else {
-        signature = NO_PC_SIGNATURE;
-    }
-
-    return signature % SHCT.size();
-}
-
 // Hashing function to index into demand_SHCT structure- 
 //      see if it is required. 
 //      SHiP does not have any hashing to index into SCHT structure
@@ -213,7 +176,7 @@ uint64_t Hawkeye::CRC( uint64_t _blockAddress )
 void Hawkeye::demand_SHCT_increment (uint64_t pc)
 {
     uint64_t signature = CRC(pc) % SHCT_SIZE;
-    if(demand_SHCT.find(signature) == demand_SHCT.end())
+    if (std::find(demand_SHCT.begin(), demand_SHCT.end(), signature) == demand_SHCT.end())
         demand_SHCT[signature] = (1+MAX_SHCT)/2;
 
     demand_SHCT[signature] = (demand_SHCT[signature] < MAX_SHCT) ? (demand_SHCT[signature]+1) : MAX_SHCT;
@@ -222,7 +185,7 @@ void Hawkeye::demand_SHCT_increment (uint64_t pc)
 void Hawkeye::demand_SHCT_decrement (uint64_t pc)
 {
     uint64_t signature = CRC(pc) % SHCT_SIZE;
-    if(demand_SHCT.find(signature) == demand_SHCT.end())
+    if(std::find(demand_SHCT.begin(), demand_SHCT.end(), signature) == demand_SHCT.end())
         demand_SHCT[signature] = (1+MAX_SHCT)/2;
     if(demand_SHCT[signature] != 0)
         demand_SHCT[signature] = demand_SHCT[signature]-1;
@@ -231,23 +194,75 @@ void Hawkeye::demand_SHCT_decrement (uint64_t pc)
 bool Hawkeye::demand_SHCT_get_prediction (uint64_t pc)
 {
     uint64_t signature = CRC(pc) % SHCT_SIZE;
-    if(demand_SHCT.find(signature) != demand_SHCT.end() && demand_SHCT[signature] < ((MAX_SHCT+1)/2))
+    if(std::find(demand_SHCT.begin(), demand_SHCT.end(), signature) != demand_SHCT.end() && demand_SHCT[signature] < ((MAX_SHCT+1)/2))
         return false;
     return true;
 }
+
+Hawkeye::SignatureType
+Hawkeye::getSignature(const PacketPtr pkt) const
+{
+    SignatureType signature;
+
+    if (pkt->req->hasPC()) {
+        signature = static_cast<SignatureType>(pkt->req->getPC());
+    } else {
+        signature = NO_PC_SIGNATURE;
+    }
+
+    return signature % demand_SHCT.size();
+}
+
+void Hawkeye::replace_addr_history_element(unsigned int sampler_set)
+{
+    uint64_t lru_addr = 0;
+    
+    for(std::map<uint64_t, ADDR_INFO>::iterator it=addr_history[sampler_set].begin(); it != addr_history[sampler_set].end(); it++)
+    {
+   //     uint64_t timer = (it->second).last_quanta;
+
+        if((it->second).lru == (SAMPLER_WAYS-1))
+        {
+            //lru_time =  (it->second).last_quanta;
+            lru_addr = it->first;
+            break;
+        }
+    }
+
+    addr_history[sampler_set].erase(lru_addr);
+}
+
+void Hawkeye::update_addr_history_lru(unsigned int sampler_set, unsigned int curr_lru)
+{
+    for(std::map<uint64_t, ADDR_INFO>::iterator it=addr_history[sampler_set].begin(); it != addr_history[sampler_set].end(); it++)
+    {
+        if((it->second).lru < curr_lru)
+        {
+            (it->second).lru++;
+            assert((it->second).lru < SAMPLER_WAYS); 
+        }
+    }
+}
+
+void Hawkeye::set_current_cache_block_data(uint32_t set, uint32_t way)
+{
+    curr_set = set;
+    curr_way = way;
+}
+
 
 // called on every cache hit and cache fill
 void Hawkeye::UpdateReplacementState (uint32_t set, uint32_t way, uint64_t paddr, uint64_t PC, uint32_t type, uint8_t hit)
 {
     paddr = (paddr >> 6) << 6;
 
-    if(type == PREFETCH)
-    {
-        if (!hit)
-            prefetched[set][way] = true;
-    }
-    else
-        prefetched[set][way] = false;
+    // if(type == PREFETCH)
+    // {
+    //     if (!hit)
+    //         prefetched[set][way] = true;
+    // }
+    // else
+    //     prefetched[set][way] = false;
 
     //Ignore writebacks
     if (type == WRITEBACK)
@@ -258,7 +273,7 @@ void Hawkeye::UpdateReplacementState (uint32_t set, uint32_t way, uint64_t paddr
     if(SAMPLED_SET(set))
     {
         //The current timestep 
-        uint64_t curr_quanta = perset_mytimer[set] % OPTGEN_VECTOR_SIZE;  //rsuresh6 the current timestamp - the current index 
+        uint64_t curr_quanta = perset_timer[set] % OPTGEN_VECTOR_SIZE;  //rsuresh6 the current timestamp - the current index 
 
         uint32_t sampler_set = (paddr >> 6) % SAMPLER_SETS;  // rsuresh6  will give which set we need to look at 
         uint64_t sampler_tag = CRC(paddr >> 12) % 256;       // rsuresh6  tag of the address
@@ -268,7 +283,7 @@ void Hawkeye::UpdateReplacementState (uint32_t set, uint32_t way, uint64_t paddr
         //a demand, ignore prefetches
         if((addr_history[sampler_set].find(sampler_tag) != addr_history[sampler_set].end()) && (type != PREFETCH))// rsuresh6  will check if sampler_tag is present in the address history - if not present then we cannot 
         {
-            unsigned int curr_timer = perset_mytimer[set];
+            unsigned int curr_timer = perset_timer[set];
             if(curr_timer < addr_history[sampler_set][sampler_tag].last_quanta)
                curr_timer = curr_timer + TIMER_SIZE;
             bool wrap =  ((curr_timer - addr_history[sampler_set][sampler_tag].last_quanta) > OPTGEN_VECTOR_SIZE);
@@ -277,17 +292,19 @@ void Hawkeye::UpdateReplacementState (uint32_t set, uint32_t way, uint64_t paddr
             if( !wrap && perset_optgen[set].should_cache(curr_quanta, last_quanta))
             {
                 if(addr_history[sampler_set][sampler_tag].prefetched)
-                    prefetch_SHCT.increment(addr_history[sampler_set][sampler_tag].PC);
+                    // prefetch_SHCT.increment(addr_history[sampler_set][sampler_tag].PC);
+                    ;
                 else
-                    demand_SHCT.increment(addr_history[sampler_set][sampler_tag].PC);
+                    demand_SHCT_increment(addr_history[sampler_set][sampler_tag].PC);
             }
             else
             {
                 //Train the predictor negatively because OPT would not have cached this line
                 if(addr_history[sampler_set][sampler_tag].prefetched)
-                    prefetch_SHCT.decrement(addr_history[sampler_set][sampler_tag].PC);
+                    // prefetch_SHCT.decrement(addr_history[sampler_set][sampler_tag].PC);
+                    ;
                 else
-                    demand_SHCT.decrement(addr_history[sampler_set][sampler_tag].PC);
+                    demand_SHCT_decrement(addr_history[sampler_set][sampler_tag].PC);
             }
             //Some maintenance operations for OPTgen
             perset_optgen[set].add_access(curr_quanta);
@@ -321,14 +338,15 @@ void Hawkeye::UpdateReplacementState (uint32_t set, uint32_t way, uint64_t paddr
             assert(addr_history[sampler_set].find(sampler_tag) != addr_history[sampler_set].end());
             //if(hit && prefetched[set][way])
             uint64_t last_quanta = addr_history[sampler_set][sampler_tag].last_quanta % OPTGEN_VECTOR_SIZE;
-            if (perset_mytimer[set] - addr_history[sampler_set][sampler_tag].last_quanta < 5*NUM_CORE) 
+            if (perset_timer[set] - addr_history[sampler_set][sampler_tag].last_quanta < 5*NUM_CORE) 
             {
                 if(perset_optgen[set].should_cache(curr_quanta, last_quanta))
                 {
                     if(addr_history[sampler_set][sampler_tag].prefetched)
-                        prefetch_SHCT.increment(addr_history[sampler_set][sampler_tag].PC);
+                        // prefetch_SHCT.increment(addr_history[sampler_set][sampler_tag].PC);
+                        ;
                     else
-                       demand_SHCT.increment(addr_history[sampler_set][sampler_tag].PC);
+                       demand_SHCT_increment(addr_history[sampler_set][sampler_tag].PC);
                 }
             }
 
@@ -340,20 +358,22 @@ void Hawkeye::UpdateReplacementState (uint32_t set, uint32_t way, uint64_t paddr
         }
 
         // Get Hawkeye's prediction for this line
-        bool new_prediction = demand_SHCT.get_prediction (PC);
+        bool new_prediction = demand_SHCT_get_prediction (PC);
         if (type == PREFETCH)
-            new_prediction = prefetch_SHCT.get_prediction (PC);
+            // new_prediction = prefetch_SHCT.get_prediction (PC);
+            ;
         // Update the sampler with the timestamp, PC and our prediction
         // For prefetches, the PC will represent the trigger PC
-        addr_history[sampler_set][sampler_tag].update(perset_mytimer[set], PC, new_prediction);
+        addr_history[sampler_set][sampler_tag].update(perset_timer[set], PC, new_prediction);
         addr_history[sampler_set][sampler_tag].lru = 0;
         //Increment the set timer
-        perset_mytimer[set] = (perset_mytimer[set]+1) % TIMER_SIZE;
+        perset_timer[set] = (perset_timer[set]+1) % TIMER_SIZE;
     }
 
-    bool new_prediction = demand_SHCT.get_prediction (PC);
+    bool new_prediction = demand_SHCT_get_prediction (PC);
     if (type == PREFETCH)
-        new_prediction = prefetch_SHCT.get_prediction (PC);
+        // new_prediction = prefetch_SHCT.get_prediction (PC);
+        ;
 
     signatures[set][way] = PC;
 

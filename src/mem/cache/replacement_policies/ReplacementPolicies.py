@@ -134,13 +134,15 @@ class NRURP(BRRIPRP):
     btp = 100
     num_bits = 1
 
-class HAWKEYERP(BRRIPRP):
-    type = "HAWKEYERP"
+class HawkeyeRP(BRRIPRP):
+    type = "HawkeyeRP"
     abstract = True
-    cxx_class = "gem5::replacement_policy::HAWKEYERP"
+    cxx_class = "gem5::replacement_policy::HawkeyeRP"
     cxx_header = "mem/cache/replacement_policies/hawkeye_rp.hh"
 
     shct_size = Param.Unsigned(16384, "Number of SHCT entries")
+    NUM_SETS = Param.Unsigned(128, "NUM_SETS")
+    NUM_WAYS = Param.Unsigned(16, "NUM_WAYS")
     # By default any value greater than 0 is enough to change insertion policy
     insertion_threshold = Param.Percent(
         1, "Percentage at which an entry changes insertion policy"

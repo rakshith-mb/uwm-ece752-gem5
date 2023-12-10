@@ -56,6 +56,7 @@
 #include "mem/cache/base.hh"
 #include "mem/cache/cache_blk.hh"
 #include "mem/cache/replacement_policies/base.hh"
+#include "mem/cache/replacement_policies/hawkeye_rp.hh"
 #include "mem/cache/replacement_policies/replaceable_entry.hh"
 #include "mem/cache/tags/base.hh"
 #include "mem/cache/tags/indexing_policies/base.hh"
@@ -145,8 +146,15 @@ class BaseSetAssoc : public BaseTags
             // Update number of references to accessed block
             blk->increaseRefCount();
 
-            // Update replacement data of accessed block
-            replacementPolicy->touch(blk->replacementData, pkt);
+            if(typeid(replacementPolicy).name() == "Hawkeye")
+            {
+                replacementPolicy->touch(blk->replacementData, pkt, blk->getSet(), blk->getWay());
+            }
+            else
+            {
+                // Update replacement data of accessed block
+                replacementPolicy->touch(blk->replacementData, pkt);
+            }
         }
 
         // The tag lookup latency is the same for a hit or a miss
