@@ -44,6 +44,7 @@
 int shct_size = 16384;
 int NUM_SETS = 128;
 int NUM_WAYS = 16;
+int numRRPVBits = 64;
 // By default any value greater than 0 is enough to change insertion polic
 int insertion_threshold = 1;
 namespace gem5
@@ -52,10 +53,10 @@ namespace gem5
 namespace replacement_policy
 {
 
-Hawkeye::HawkeyeReplData::HawkeyeReplData(int num_bits)
-  : BRRIPReplData(num_bits), signature(0)
-{
-}
+// Hawkeye::HawkeyeReplData::HawkeyeReplData()
+//   : signature(0), valid(false)
+// {
+// }
 
 Hawkeye::SignatureType
 Hawkeye::HawkeyeReplData::getSignature() const
@@ -70,7 +71,7 @@ Hawkeye::HawkeyeReplData::setSignature(SignatureType new_signature)
 }
 
 Hawkeye::Hawkeye(const Params &p)
-  : BRRIP(p) , insertionThreshold(insertion_threshold / 100.0),
+  : Base(p) , insertionThreshold(insertion_threshold / 100.0),
     demand_SHCT(shct_size, uint64_t(numRRPVBits)),
     perset_optgen(NUM_SETS),
     perset_timer(NUM_SETS,0) // creating NUM_SETS entries with initial value as 0
@@ -99,7 +100,10 @@ Hawkeye::invalidate(const std::shared_ptr<ReplacementData>& replacement_data)
     //     SHCT[casted_replacement_data->getSignature()]--;
     // }
 
-    BRRIP::invalidate(replacement_data);
+    //BRRIP::invalidate(replacement_data);
+
+    // Invalidate entry
+    casted_replacement_data->valid = false;
 }
 
 void
@@ -413,13 +417,13 @@ Hawkeye::getVictim(const ReplacementCandidates& candidates) const
     ReplaceableEntry* victim = candidates[0];
 
     // Store victim->rrpv in a variable to improve code readability
-    int victim_RRPV = std::static_pointer_cast<BRRIPReplData>(
+    int victim_RRPV = std::static_pointer_cast<HawkeyeReplData>(
                         victim->replacementData)->rrpv;
 
     // Visit all candidates to find victim
     for (const auto& candidate : candidates) {
-        std::shared_ptr<BRRIPReplData> candidate_repl_data =
-            std::static_pointer_cast<BRRIPReplData>(
+        std::shared_ptr<HawkeyeReplData> candidate_repl_data =
+            std::static_pointer_cast<HawkeyeReplData>(
                 candidate->replacementData);
 
         // Stop searching for victims if an invalid entry is found

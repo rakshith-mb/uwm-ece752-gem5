@@ -53,7 +53,7 @@ class L2Cache(Cache):
     response_latency = 20
     mshrs = 20
     tgts_per_mshr = 12
-    replacement_policy = LRURP()
+    replacement_policy = HawkeyeRP()
 
     def connectCPUSideBus(self, bus):
         self.cpu_side = bus.mem_side_ports

@@ -42,7 +42,7 @@
 
 #include "base/compiler.hh"
 #include "base/sat_counter.hh"
-#include "mem/cache/replacement_policies/brrip_rp.hh"
+#include "mem/cache/replacement_policies/base.hh"
 #include "mem/packet.hh"
 #include "params/HawkeyeRP.hh"  
 
@@ -75,7 +75,7 @@ struct HawkeyeRPParams;
 namespace replacement_policy
 {
 
-class Hawkeye : public BRRIP
+class Hawkeye : public Base
 {
   protected:
     typedef std::size_t SignatureType;
@@ -83,14 +83,19 @@ class Hawkeye : public BRRIP
     const SignatureType NO_PC_SIGNATURE = 0;
 
     /** Hawkeye-specific implementation of replacement data. */
-    class HawkeyeReplData : public BRRIPReplData
+    struct HawkeyeReplData : ReplacementData
     {
-      private:
-        /** Signature that caused the insertion of this entry. */
-        SignatureType signature;
+      // private:
+      //   /** Signature that caused the insertion of this entry. */
 
-      public:
-        HawkeyeReplData(int num_bits);
+      // public:
+        SignatureType signature; // this is not assigned any value but used ! 
+
+        bool valid;
+        uint32_t rrpv;
+        HawkeyeReplData(const int num_bits) : rrpv(num_bits), signature(0), valid(false)
+        {
+        }
 
         /** Get entry's signature. */
         SignatureType getSignature() const;
