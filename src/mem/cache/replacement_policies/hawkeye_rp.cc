@@ -41,7 +41,11 @@
 // #define SAMPLED_SET(set) (bits(set, 0 , 6) == bits(set, ((unsigned long long)log2(128) - 6), 6) ) // TO BE FIXED - changed this at 4:24 am with 0 sleep
 
 #define SAMPLED_SET(set) (bits(set, 0 , 6) == bits(set, ((unsigned long long)7 - 6), 6) ) // TO BE FIXED - changed this at 4:24 am with 0 sleep
-
+int shct_size = 16384;
+int NUM_SETS = 128;
+int NUM_WAYS = 16;
+// By default any value greater than 0 is enough to change insertion polic
+int insertion_threshold = 1;
 namespace gem5
 {
 
@@ -66,16 +70,16 @@ Hawkeye::HawkeyeReplData::setSignature(SignatureType new_signature)
 }
 
 Hawkeye::Hawkeye(const Params &p)
-  : BRRIP(p), insertionThreshold(p.insertion_threshold / 100.0),
-    demand_SHCT(p.shct_size, uint64_t(numRRPVBits)),
-    perset_optgen(p.NUM_SETS),
-    perset_timer(p.NUM_SETS,0) // creating NUM_SETS entries with initial value as 0
+  : BRRIP(p) , insertionThreshold(insertion_threshold / 100.0),
+    demand_SHCT(shct_size, uint64_t(numRRPVBits)),
+    perset_optgen(NUM_SETS),
+    perset_timer(NUM_SETS,0) // creating NUM_SETS entries with initial value as 0
 {
     // We are going to assume that Params has a field called 
     //          1. NUM_SETS which says the total number of sets
     //          2. NUM_WAYS which says the total number of ways
-    for(int i=0;i<p.NUM_SETS;i++){
-        perset_optgen[i].init(p.NUM_WAYS-2);
+    for(int i=0;i<NUM_SETS;i++){
+        perset_optgen[i].init(NUM_WAYS-2);
     }
 
     addr_history.resize(SAMPLER_SETS);
@@ -100,7 +104,7 @@ Hawkeye::invalidate(const std::shared_ptr<ReplacementData>& replacement_data)
 
 void
 Hawkeye::touch(const std::shared_ptr<ReplacementData>& replacement_data,
-    const PacketPtr pkt, uint32_t set, uint32_t way)
+    const PacketPtr pkt)
 {
     std::shared_ptr<HawkeyeReplData> casted_replacement_data =
         std::static_pointer_cast<HawkeyeReplData>(replacement_data);
@@ -112,7 +116,7 @@ Hawkeye::touch(const std::shared_ptr<ReplacementData>& replacement_data,
     // incremented
     // SHCT[signature]++;
 
-    UpdateReplacementState(set, way, pkt->getAddr(), signature, DEMAND, CACHE_HIT);
+    UpdateReplacementState(replacement_data->_set, replacement_data->_way, pkt->getAddr(), signature, DEMAND, CACHE_HIT);
 
     // // This was a hit; update replacement data accordingly
     // BRRIP::touch(replacement_data);
@@ -359,9 +363,8 @@ void Hawkeye::UpdateReplacementState (uint32_t set, uint32_t way, uint64_t paddr
 
         // Get Hawkeye's prediction for this line
         bool new_prediction = demand_SHCT_get_prediction (PC);
-        if (type == PREFETCH)
+        //if (type == PREFETCH)
             // new_prediction = prefetch_SHCT.get_prediction (PC);
-            ;
         // Update the sampler with the timestamp, PC and our prediction
         // For prefetches, the PC will represent the trigger PC
         addr_history[sampler_set][sampler_tag].update(perset_timer[set], PC, new_prediction);
@@ -371,9 +374,8 @@ void Hawkeye::UpdateReplacementState (uint32_t set, uint32_t way, uint64_t paddr
     }
 
     bool new_prediction = demand_SHCT_get_prediction (PC);
-    if (type == PREFETCH)
+    //if (type == PREFETCH)
         // new_prediction = prefetch_SHCT.get_prediction (PC);
-        ;
 
     signatures[set][way] = PC;
 
@@ -399,6 +401,53 @@ void Hawkeye::UpdateReplacementState (uint32_t set, uint32_t way, uint64_t paddr
         }
         rrpv[set][way] = 0;
     }
+}
+
+ReplaceableEntry*
+Hawkeye::getVictim(const ReplacementCandidates& candidates) const
+{
+    // There must be at least one replacement candidate
+    assert(candidates.size() > 0);
+
+    // Use first candidate as dummy victim
+    ReplaceableEntry* victim = candidates[0];
+
+    // Store victim->rrpv in a variable to improve code readability
+    int victim_RRPV = std::static_pointer_cast<BRRIPReplData>(
+                        victim->replacementData)->rrpv;
+
+    // Visit all candidates to find victim
+    for (const auto& candidate : candidates) {
+        std::shared_ptr<BRRIPReplData> candidate_repl_data =
+            std::static_pointer_cast<BRRIPReplData>(
+                candidate->replacementData);
+
+        // Stop searching for victims if an invalid entry is found
+        if (!candidate_repl_data->valid) {
+            return candidate;
+        }
+        if (candidate_repl_data->rrpv == maxRRPV){
+            victim = candidate;
+            return victim;          
+        }
+
+        // Update victim entry if necessary
+        int candidate_RRPV = candidate_repl_data->rrpv;
+        if (candidate_RRPV > victim_RRPV) {
+            victim = candidate;
+            victim_RRPV = candidate_RRPV;
+        }
+    }
+
+    // if( SAMPLED_SET(set) )
+    // {
+    //     // if(prefetched[set][lru_victim])
+    //     //     prefetch_predictor->decrement(signatures[set][lru_victim]);
+    //     // else
+    //         demand_SHCT.demand_SHCT_decrement();
+    // }
+
+    return victim;
 }
 
 

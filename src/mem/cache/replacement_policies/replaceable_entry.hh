@@ -45,7 +45,18 @@ namespace replacement_policy
  * The replacement data needed by replacement policies. Each replacement policy
  * should have its own implementation of replacement data.
  */
-struct ReplacementData {};
+struct ReplacementData {
+      /**
+     * Set to which this entry belongs.
+     */
+    uint32_t _set;
+
+    /**
+     * Way (relative position within the set) to which this entry belongs.
+     */
+    uint32_t _way;
+
+};
 
 } // namespace replacement_policy
 

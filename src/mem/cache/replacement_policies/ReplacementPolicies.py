@@ -137,16 +137,23 @@ class NRURP(BRRIPRP):
 class HawkeyeRP(BRRIPRP):
     type = "HawkeyeRP"
     abstract = True
-    cxx_class = "gem5::replacement_policy::HawkeyeRP"
+    cxx_class = "gem5::replacement_policy::Hawkeye"
     cxx_header = "mem/cache/replacement_policies/hawkeye_rp.hh"
 
-    shct_size = Param.Unsigned(16384, "Number of SHCT entries")
-    NUM_SETS = Param.Unsigned(128, "NUM_SETS")
-    NUM_WAYS = Param.Unsigned(16, "NUM_WAYS")
-    # By default any value greater than 0 is enough to change insertion policy
-    insertion_threshold = Param.Percent(
+    shct_size = Param.Int(16384, "Number of SHCT entries")
+    NUM_SETS = Param.Int(128, "NUM_SETS")
+    NUM_WAYS = Param.Int(16, "NUM_WAYS")
+    # # By default any value greater than 0 is enough to change insertion policy
+    insertion_threshold = Param.Int(
         1, "Percentage at which an entry changes insertion policy"
     )
+
+    # shct_size = 16384
+    # NUM_SETS = 128
+    # NUM_WAYS = 16
+    # # By default any value greater than 0 is enough to change insertion policy
+    # insertion_threshold = 1
+
     # Always make hits mark entries as last to be evicted
     hit_priority = True
     # Let the predictor decide when to change insertion policy

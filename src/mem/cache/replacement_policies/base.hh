@@ -79,7 +79,7 @@ class Base : public SimObject
     }
     virtual void touch(const std::shared_ptr<ReplacementData>&
         replacement_data) const = 0;
-
+ 
     /**
      * Reset replacement data. Used when it's holder is inserted/validated.
      *

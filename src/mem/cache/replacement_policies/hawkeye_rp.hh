@@ -44,6 +44,7 @@
 #include "base/sat_counter.hh"
 #include "mem/cache/replacement_policies/brrip_rp.hh"
 #include "mem/packet.hh"
+#include "params/HawkeyeRP.hh"  
 
 // Hawkeye OPTGen
 #include "optgen.h"
@@ -156,8 +157,10 @@ class Hawkeye : public BRRIP
      * @param replacement_data  Replacement data to be touched.
      * @param pkt Packet that generated this hit.
      */
+
     void touch(const std::shared_ptr<ReplacementData>& replacement_data,
         const PacketPtr pkt) override;
+        
     void touch(const std::shared_ptr<ReplacementData>& replacement_data) const
         override;
 
@@ -197,6 +200,8 @@ class Hawkeye : public BRRIP
     void update_addr_history_lru(unsigned int sampler_set, unsigned int curr_lru);
 
     void set_current_cache_block_data(uint32_t set, uint32_t way);
+
+    ReplaceableEntry* getVictim(const ReplacementCandidates& candidates) const override;
 };
 
 } // namespace replacement_policy

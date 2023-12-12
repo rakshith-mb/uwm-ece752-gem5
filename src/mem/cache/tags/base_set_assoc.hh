@@ -146,9 +146,11 @@ class BaseSetAssoc : public BaseTags
             // Update number of references to accessed block
             blk->increaseRefCount();
 
-            if(typeid(replacementPolicy).name() == "Hawkeye")
+            if(typeid(replacementPolicy) == typeid(gem5::replacement_policy::Hawkeye))
             {
-                replacementPolicy->touch(blk->replacementData, pkt, blk->getSet(), blk->getWay());
+                blk->replacementData->_set = (uint32_t)blk->getSet();
+                blk->replacementData->_way = (uint32_t)blk->getWay();
+                replacementPolicy->touch(blk->replacementData, pkt);
             }
             else
             {
@@ -177,6 +179,9 @@ class BaseSetAssoc : public BaseTags
                          const std::size_t size,
                          std::vector<CacheBlk*>& evict_blks) override
     {
+
+        CacheBlk *blk = findBlock(addr, is_secure);
+
         // Get possible entries to be victimized
         const std::vector<ReplaceableEntry*> entries =
             indexingPolicy->getPossibleEntries(addr);
