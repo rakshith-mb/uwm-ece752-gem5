@@ -1,4 +1,6 @@
 from m5.objects import Cache
+from m5.params import *
+from m5.objects.ReplacementPolicies import *
 
 class L1Cache(Cache):
     assoc = 2
@@ -51,6 +53,7 @@ class L2Cache(Cache):
     response_latency = 20
     mshrs = 20
     tgts_per_mshr = 12
+    replacement_policy = BRRIPRP()
 
     def connectCPUSideBus(self, bus):
         self.cpu_side = bus.mem_side_ports
@@ -63,3 +66,5 @@ class L2Cache(Cache):
         if not options or not options.l2_size:
             return
         self.size = options.l2_size
+        self.addStatVisitor(["replacement_policy"], self.replacement_policy)
+    
