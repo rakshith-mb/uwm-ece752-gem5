@@ -55,19 +55,20 @@
 #define SAMPLER_WAYS 8
 #define SAMPLER_SETS SAMPLED_CACHE_SIZE/SAMPLER_WAYS
 
-#define CACHE_HIT   1
-#define CACHE_MISS  0
 
-#define DEMAND      8
-#define PREFETCH    9
-#define WRITEBACK   10
 #define bitmask(l) (((l) == 64) ? (unsigned long long)(-1LL) : ((1LL << (l))-1LL))
 #define bits(x, i, l) (((x) >> (i)) & bitmask(l))
 //Sample 64 sets per core
 #define SAMPLED_SET(set) (bits(set, 0 , 6) == bits(set, ((unsigned long long)log2(LLC_SETS) - 6), 6) )
 
-#define shct_size 16384
-#define numRRPVBits 64
+// Added by Us
+#define CACHE_HIT   1
+#define CACHE_MISS  0
+#define DEMAND      8
+#define PREFETCH    9
+#define WRITEBACK   10
+// #define shct_size 16384
+// #define numRRPVBits 64
 #define  insertion_threshold 1
 
 namespace gem5
@@ -87,25 +88,13 @@ class BRRIP : public Base
     struct BRRIPReplData : ReplacementData
     {
         /** Tick on which the entry was last touched. */
-        Tick lastTouchTick;
-        SignatureType signature; // this is not assigned any value but used ! 
 
         bool valid;
-        uint32_t rrpv;
         /**
          * Default constructor. Invalidate data.
          */
-        BRRIPReplData() : lastTouchTick(0),signature(0), valid(false), rrpv(64) {}
+        BRRIPReplData() : valid(false){}
 
-        /** Get entry's signature. */
-        SignatureType getSignature() const;
-
-        /**
-         * Set this entry's signature and reset outcome.
-         *
-         * @param signature New signature value/
-         */
-        void setSignature(SignatureType signature);
     };
 
   public:
@@ -113,8 +102,8 @@ class BRRIP : public Base
     BRRIP(const Params &p);
     ~BRRIP() = default;
     const double insertionThreshold;
-    std::vector<uint64_t> demand_SHCT;
-    std::vector<uint64_t> prefetch_SHCT;
+    std::map<uint64_t, uint32_t> demand_SHCT;
+    std::map<uint64_t, uint32_t> prefetch_SHCT;
   
     // Hawkeye implementation requirements : OPTGen, addr_history, perset_timer 
     std::vector<OPTgen>                     perset_optgen; //OPTGen Structure
@@ -124,7 +113,6 @@ class BRRIP : public Base
     uint64_t signatures[LLC_SETS][LLC_WAYS];
     uint32_t rrpv[LLC_SETS][LLC_WAYS];
 
-    uint32_t curr_set, curr_way;
     /**
      * Invalidate replacement data to set it as the next probable victim.
      * Sets its last touch tick as the starting tick.
@@ -170,7 +158,7 @@ class BRRIP : public Base
      */
     std::shared_ptr<ReplacementData> instantiateEntry() override;
     // increments the trainer Signature indexed counter value
-    void demand_SHCT_increment (uint64_t pc);
+    void demand_SHCT_increment (uint64_t pc) ;
 
     // decrement the trainer Signature indexed counter value
     void demand_SHCT_decrement (uint64_t pc);

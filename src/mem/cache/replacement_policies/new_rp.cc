@@ -35,7 +35,6 @@
 #include "params/BRRIPRP.hh"
 #include "sim/cur_tick.hh"
 
-
 namespace gem5
 {
 
@@ -44,7 +43,7 @@ namespace replacement_policy
 
 BRRIP::BRRIP(const Params &p)
   : Base(p), insertionThreshold(insertion_threshold / 100.0),
-    demand_SHCT(shct_size, uint64_t(numRRPVBits)),
+    //demand_SHCT(shct_size, uint64_t(numRRPVBits)),
     perset_optgen(LLC_SETS),
     perset_timer(LLC_SETS,0) // creating NUM_SETS entries with initial value as 0
 {
@@ -62,23 +61,10 @@ BRRIP::BRRIP(const Params &p)
     // printf("\n\n\nNew RP Constructor is called here \n");
 }
 
-BRRIP::SignatureType
-BRRIP::BRRIPReplData::getSignature() const
-{
-    return signature;
-}
-
-void
-BRRIP::BRRIPReplData::setSignature(SignatureType new_signature)
-{
-    signature = new_signature;
-}
 void
 BRRIP::invalidate(const std::shared_ptr<ReplacementData>& replacement_data)
 {
     // Reset last touch timestamp
-    std::static_pointer_cast<BRRIPReplData>(
-        replacement_data)->lastTouchTick = Tick(0);
     std::static_pointer_cast<BRRIPReplData>(
         replacement_data)->valid = false;
 }
@@ -87,8 +73,6 @@ void
 BRRIP::touch(const std::shared_ptr<ReplacementData>& replacement_data) const
 {
     // Update last touch timestamp
-    std::static_pointer_cast<BRRIPReplData>(
-        replacement_data)->lastTouchTick = curTick();
 }
 
 void
@@ -101,13 +85,13 @@ BRRIP::touch(const std::shared_ptr<ReplacementData>& replacement_data,
         std::static_pointer_cast<BRRIPReplData>(replacement_data);
 
     // Get signature
-    const SignatureType signature = getSignature(pkt);
+    uint64_t PC = (uint64_t) getSignature(pkt);
 
     // When a hit happens the SHCT entry indexed by the signature is
     // incremented
     // SHCT[signature]++;
 
-    UpdateReplacementState(replacement_data->_set, replacement_data->_way, pkt->getAddr(), signature, DEMAND, CACHE_HIT);
+    UpdateReplacementState(replacement_data->_set, replacement_data->_way, pkt->getAddr(), PC, DEMAND, CACHE_HIT);
 
     // // This was a hit; update replacement data accordingly
     // BRRIP::touch(replacement_data);
@@ -117,8 +101,6 @@ void
 BRRIP::reset(const std::shared_ptr<ReplacementData>& replacement_data) const
 {
     // Set last touch timestamp
-    std::static_pointer_cast<BRRIPReplData>(
-        replacement_data)->lastTouchTick = curTick();
 }
 void
 BRRIP::reset(const std::shared_ptr<ReplacementData>& replacement_data,
@@ -128,13 +110,9 @@ BRRIP::reset(const std::shared_ptr<ReplacementData>& replacement_data,
         std::static_pointer_cast<BRRIPReplData>(replacement_data);
 
     // Get signature
-    const SignatureType signature = getSignature(pkt);
+    uint64_t PC = (uint64_t) (pkt);
 
-
-    // // Store signature
-    casted_replacement_data->setSignature(signature);
-
-    UpdateReplacementState(casted_replacement_data->_set, casted_replacement_data->_way, pkt->getAddr(), signature, DEMAND, CACHE_MISS);
+    UpdateReplacementState(casted_replacement_data->_set, casted_replacement_data->_way, pkt->getAddr(), PC, DEMAND, CACHE_MISS);
 
     // If SHCT for signature is set, predict intermediate re-reference.
     // Predict distant re-reference otherwise
@@ -142,6 +120,7 @@ BRRIP::reset(const std::shared_ptr<ReplacementData>& replacement_data,
     // if (SHCT[signature].calcSaturation() >=  ) {
     //     casted_replacement_data->rrpv--;
     // }
+
 }
 ReplaceableEntry*
 BRRIP::getVictim(const ReplacementCandidates& candidates) const
@@ -153,8 +132,10 @@ BRRIP::getVictim(const ReplacementCandidates& candidates) const
     ReplaceableEntry* victim = candidates[0];
 
     // Store victim->rrpv in a variable to improve code readability
-    int victim_RRPV = std::static_pointer_cast<BRRIPReplData>(
-                        victim->replacementData)->rrpv;
+    // int victim_RRPV = std::static_pointer_cast<BRRIPReplData>(
+                        // victim->replacementData)->rrpv;
+
+    int victim_RRPV = rrpv[victim->getSet()][victim->getWay()];
 
     // Visit all candidates to find victim
     for (const auto& candidate : candidates) {
@@ -162,22 +143,31 @@ BRRIP::getVictim(const ReplacementCandidates& candidates) const
             std::static_pointer_cast<BRRIPReplData>(
                 candidate->replacementData);
 
+        int candidate_RRPV = rrpv[candidate->getSet()][candidate->getWay()];
+
         // Stop searching for victims if an invalid entry is found
         if (!candidate_repl_data->valid) {
             return candidate;
         }
-        if (candidate_repl_data->rrpv == maxRRPV){
+        if (candidate_RRPV == maxRRPV){
             victim = candidate;
-            return victim;          
+            return victim;      // BUG - Cannot return here - have to decrement the SHCT     
         }
 
         // Update victim entry if necessary
-        int candidate_RRPV = candidate_repl_data->rrpv;
         if (candidate_RRPV > victim_RRPV) {
             victim = candidate;
             victim_RRPV = candidate_RRPV;
         }
     }
+
+    // if( SAMPLED_SET(victim->getSet()) )
+    // {
+    //     // if(prefetched[victim->getSet()][victim->getWay()])
+    //     //     prefetch_predictor->decrement(signatures[victim->getSet()][victim->getWay()]);
+    //     // else
+    //         demand_SHCT_decrement(signatures[victim->getSet()][victim->getWay()]);
+    // }
 
     return victim;
 }
@@ -195,16 +185,17 @@ uint64_t BRRIP::CRC( uint64_t _blockAddress )
 void BRRIP::demand_SHCT_increment (uint64_t pc)
 {
     uint64_t signature = CRC(pc) % SHCT_SIZE;
-    if (std::find(demand_SHCT.begin(), demand_SHCT.end(), signature) == demand_SHCT.end())
+    if(demand_SHCT.find(signature) == demand_SHCT.end())
         demand_SHCT[signature] = (1+MAX_SHCT)/2;
 
     demand_SHCT[signature] = (demand_SHCT[signature] < MAX_SHCT) ? (demand_SHCT[signature]+1) : MAX_SHCT;
+
 }
 
 void BRRIP::demand_SHCT_decrement (uint64_t pc)
 {
     uint64_t signature = CRC(pc) % SHCT_SIZE;
-    if(std::find(demand_SHCT.begin(), demand_SHCT.end(), signature) == demand_SHCT.end())
+    if(demand_SHCT.find(signature) == demand_SHCT.end())
         demand_SHCT[signature] = (1+MAX_SHCT)/2;
     if(demand_SHCT[signature] != 0)
         demand_SHCT[signature] = demand_SHCT[signature]-1;
@@ -213,7 +204,7 @@ void BRRIP::demand_SHCT_decrement (uint64_t pc)
 bool BRRIP::demand_SHCT_get_prediction (uint64_t pc)
 {
     uint64_t signature = CRC(pc) % SHCT_SIZE;
-    if(std::find(demand_SHCT.begin(), demand_SHCT.end(), signature) != demand_SHCT.end() && demand_SHCT[signature] < ((MAX_SHCT+1)/2))
+    if(demand_SHCT.find(signature) != demand_SHCT.end() && demand_SHCT[signature] < ((MAX_SHCT+1)/2))
         return false;
     return true;
 }
@@ -234,7 +225,10 @@ BRRIP::getSignature(const PacketPtr pkt) const
         signature = (SignatureType)0;
     }
 
-    return signature % demand_SHCT.size();
+    // if(demand_SHCT.size())
+    //     return signature % SHCT_SIZE;
+    // else
+    return signature;
 }
 
 void BRRIP::replace_addr_history_element(unsigned int sampler_set)
@@ -267,13 +261,6 @@ void BRRIP::update_addr_history_lru(unsigned int sampler_set, unsigned int curr_
         }
     }
 }
-
-void BRRIP::set_current_cache_block_data(uint32_t set, uint32_t way)
-{
-    curr_set = set;
-    curr_way = way;
-}
-
 
 // called on every cache hit and cache fill
 void BRRIP::UpdateReplacementState (uint32_t set, uint32_t way, uint64_t paddr, uint64_t PC, uint32_t type, uint8_t hit)
@@ -315,19 +302,19 @@ void BRRIP::UpdateReplacementState (uint32_t set, uint32_t way, uint64_t paddr, 
             //and for prefetch hits, we train the last prefetch trigger PC
             if( !wrap && perset_optgen[set].should_cache(curr_quanta, last_quanta))
             {
-                if(addr_history[sampler_set][sampler_tag].prefetched)
-                    // prefetch_SHCT.increment(addr_history[sampler_set][sampler_tag].PC);
-                    ;
-                else
+                // if(addr_history[sampler_set][sampler_tag].prefetched)
+                //     // prefetch_SHCT.increment(addr_history[sampler_set][sampler_tag].PC);
+                //     ;
+                // else
                     demand_SHCT_increment(addr_history[sampler_set][sampler_tag].PC);
             }
             else
             {
                 //Train the predictor negatively because OPT would not have cached this line
-                if(addr_history[sampler_set][sampler_tag].prefetched)
-                    // prefetch_SHCT.decrement(addr_history[sampler_set][sampler_tag].PC);
-                    ;
-                else
+                // if(addr_history[sampler_set][sampler_tag].prefetched)
+                //     // prefetch_SHCT.decrement(addr_history[sampler_set][sampler_tag].PC);
+                //     ;
+                // else
                     demand_SHCT_decrement(addr_history[sampler_set][sampler_tag].PC);
             }
             //Some maintenance operations for OPTgen
@@ -367,10 +354,10 @@ void BRRIP::UpdateReplacementState (uint32_t set, uint32_t way, uint64_t paddr, 
             {
                 if(perset_optgen[set].should_cache(curr_quanta, last_quanta))
                 {
-                    if(addr_history[sampler_set][sampler_tag].prefetched)
-                        // prefetch_SHCT.increment(addr_history[sampler_set][sampler_tag].PC);
-                        ;
-                    else
+                    // if(addr_history[sampler_set][sampler_tag].prefetched)
+                    //     // prefetch_SHCT.increment(addr_history[sampler_set][sampler_tag].PC);
+                    //     ;
+                    // else
                        demand_SHCT_increment(addr_history[sampler_set][sampler_tag].PC);
                 }
             }
@@ -400,28 +387,28 @@ void BRRIP::UpdateReplacementState (uint32_t set, uint32_t way, uint64_t paddr, 
 
     signatures[set][way] = PC;
 
-    // // //Set RRIP values and age cache-friendly line
-    // if(!new_prediction)
-    //      rrpv[set][way] = maxRRPV;
-    // else
-    // {
-    //     rrpv[set][way] = 0;
-    //     if(!hit)
-    //     {
-    //         bool saturated = false;
-    //         for(uint32_t i=0; i<LLC_WAYS; i++)
-    //             if (rrpv[set][i] == maxRRPV-1)
-    //                 saturated = true;
+    // //Set RRIP values and age cache-friendly line
+    if(!new_prediction)
+         rrpv[set][way] = maxRRPV;
+    else
+    {
+        rrpv[set][way] = 0;
+        if(!hit)
+        {
+            bool saturated = false;
+            for(uint32_t i=0; i<LLC_WAYS; i++)
+                if (rrpv[set][i] == maxRRPV-1)
+                    saturated = true;
 
-    //         //Age all the cache-friendly  lines
-    //         for(uint32_t i=0; i<LLC_WAYS; i++)
-    //         {
-    //             if (!saturated && rrpv[set][i] < maxRRPV-1)
-    //                 rrpv[set][i]++;
-    //         }
-    //     }
-    //     rrpv[set][way] = 0;
-    // }
+            //Age all the cache-friendly  lines
+            for(uint32_t i=0; i<LLC_WAYS; i++)
+            {
+                if (!saturated && rrpv[set][i] < maxRRPV-1)
+                    rrpv[set][i]++;
+            }
+        }
+        rrpv[set][way] = 0;
+    }
 }
 } // namespace replacement_policy
 } // namespace gem5
