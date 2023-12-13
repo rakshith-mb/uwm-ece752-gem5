@@ -162,7 +162,7 @@ BRRIP::getVictim(const ReplacementCandidates& candidates) const
             victim_RRPV = candidate_RRPV;
         }
     }
-    printf("\nget Victim function called here victim rrpv = %llx ; set = %d way = %d \n", victim_RRPV, victim->getSet(), victim->getWay());
+    // printf("\nget Victim function called here victim rrpv = %llx ; set = %d way = %d \n", victim_RRPV, victim->getSet(), victim->getWay());
     if( SAMPLED_SET(victim->getSet()) )
     {
         // if(prefetched[victim->getSet()][victim->getWay()])
@@ -231,7 +231,7 @@ BRRIP::getSignature(const PacketPtr pkt) const
     //     return signature % SHCT_SIZE;
     // else
 
-    printf("\nSignature - %ld\n", signature);
+    // printf("\nSignature - %ld\n", signature);
     return signature;
 }
 
