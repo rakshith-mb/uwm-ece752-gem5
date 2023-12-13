@@ -56,6 +56,8 @@ system.cpu.interrupts[0].int_responder = system.membus.mem_side_ports
 # added 
 system.cpu.max_insts_any_thread = 250000000
 
+system.cpu.warmup_percentage = 20
+
 system.system_port = system.membus.cpu_side_ports
 
 system.mem_ctrl = MemCtrl()

@@ -89,11 +89,13 @@ class BRRIP : public Base
     {
         /** Tick on which the entry was last touched. */
 
-        bool valid;
+        // bool valid;
         /**
          * Default constructor. Invalidate data.
          */
-        BRRIPReplData() : valid(false){}
+        BRRIPReplData() {
+          
+        }
 
     };
 

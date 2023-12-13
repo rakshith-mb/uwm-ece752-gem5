@@ -57,7 +57,7 @@ BRRIP::BRRIP(const Params &p)
     addr_history.resize(SAMPLER_SETS);
     for (int i=0; i<SAMPLER_SETS; i++) 
         addr_history[i].clear();
-
+    // DPRINTF(BRIP_D, "Constructor called here\n");
     // printf("\n\n\nNew RP Constructor is called here \n");
 }
 
@@ -65,8 +65,10 @@ void
 BRRIP::invalidate(const std::shared_ptr<ReplacementData>& replacement_data)
 {
     // Reset last touch timestamp
-    std::static_pointer_cast<BRRIPReplData>(
-        replacement_data)->valid = false;
+    // std::static_pointer_cast<BRRIPReplData>(
+    //     replacement_data)->valid = false;
+    // DPRINTF(BRIP_D, "Invalidate function called here\n");
+
 }
 
 void
@@ -86,7 +88,7 @@ BRRIP::touch(const std::shared_ptr<ReplacementData>& replacement_data,
 
     // Get signature
     uint64_t PC = (uint64_t) getSignature(pkt);
-
+    // DPRINTF(BRIP_D, "Touch function called here %llx ; set = %d way = %d \n", PC,replacement_data->_set, replacement_data->_way);
     // When a hit happens the SHCT entry indexed by the signature is
     // incremented
     // SHCT[signature]++;
@@ -111,7 +113,7 @@ BRRIP::reset(const std::shared_ptr<ReplacementData>& replacement_data,
 
     // Get signature
     uint64_t PC = (uint64_t) (pkt);
-
+    // DPRINTF(BRIP_D, "Reset function called here %llx ; set = %d way = %d \n", PC,replacement_data->_set, replacement_data->_way);
     UpdateReplacementState(casted_replacement_data->_set, casted_replacement_data->_way, pkt->getAddr(), PC, DEMAND, CACHE_MISS);
 
     // If SHCT for signature is set, predict intermediate re-reference.
@@ -146,9 +148,9 @@ BRRIP::getVictim(const ReplacementCandidates& candidates) const
         int candidate_RRPV = rrpv[candidate->getSet()][candidate->getWay()];
 
         // Stop searching for victims if an invalid entry is found
-        if (!candidate_repl_data->valid) {
-            return candidate;
-        }
+        // if (!candidate_repl_data->valid) {
+        //     return candidate;
+        // }
         if (candidate_RRPV == maxRRPV){
             victim = candidate;
             return victim;      // BUG - Cannot return here - have to decrement the SHCT     
@@ -160,14 +162,14 @@ BRRIP::getVictim(const ReplacementCandidates& candidates) const
             victim_RRPV = candidate_RRPV;
         }
     }
-
-    // if( SAMPLED_SET(victim->getSet()) )
-    // {
-    //     // if(prefetched[victim->getSet()][victim->getWay()])
-    //     //     prefetch_predictor->decrement(signatures[victim->getSet()][victim->getWay()]);
-    //     // else
-    //         demand_SHCT_decrement(signatures[victim->getSet()][victim->getWay()]);
-    // }
+    printf("\nget Victim function called here victim rrpv = %llx ; set = %d way = %d \n", victim_RRPV, victim->getSet(), victim->getWay());
+    if( SAMPLED_SET(victim->getSet()) )
+    {
+        // if(prefetched[victim->getSet()][victim->getWay()])
+        //     prefetch_predictor->decrement(signatures[victim->getSet()][victim->getWay()]);
+        // else
+            const_cast<BRRIP*>(this)->demand_SHCT_decrement(signatures[victim->getSet()][victim->getWay()]);
+    }
 
     return victim;
 }
@@ -228,6 +230,8 @@ BRRIP::getSignature(const PacketPtr pkt) const
     // if(demand_SHCT.size())
     //     return signature % SHCT_SIZE;
     // else
+
+    printf("\nSignature - %ld\n", signature);
     return signature;
 }
 
@@ -294,11 +298,13 @@ void BRRIP::UpdateReplacementState (uint32_t set, uint32_t way, uint64_t paddr, 
         // a demand, ignore prefetches
         if((addr_history[sampler_set].find(sampler_tag) != addr_history[sampler_set].end()) && (type != PREFETCH))// rsuresh6  will check if sampler_tag is present in the address history - if not present then we cannot 
         {
+
             unsigned int curr_timer = perset_timer[set];
             if(curr_timer < addr_history[sampler_set][sampler_tag].last_quanta)
                curr_timer = curr_timer + TIMER_SIZE;
             bool wrap =  ((curr_timer - addr_history[sampler_set][sampler_tag].last_quanta) > OPTGEN_VECTOR_SIZE);
             uint64_t last_quanta = addr_history[sampler_set][sampler_tag].last_quanta % OPTGEN_VECTOR_SIZE;
+            // DPRINTF(BRIP_D, "UpdateReplacementState function called here victim curr_quanta = %d ; set = %d way = %d last_quanta = %ld \n", curr_quanta, sampler_set, sampler_tag, last_quanta);
             //and for prefetch hits, we train the last prefetch trigger PC
             if( !wrap && perset_optgen[set].should_cache(curr_quanta, last_quanta))
             {
@@ -397,13 +403,13 @@ void BRRIP::UpdateReplacementState (uint32_t set, uint32_t way, uint64_t paddr, 
         {
             bool saturated = false;
             for(uint32_t i=0; i<LLC_WAYS; i++)
-                if (rrpv[set][i] == maxRRPV-1)
+                if (rrpv[set][i] == (maxRRPV-1))
                     saturated = true;
 
             //Age all the cache-friendly  lines
             for(uint32_t i=0; i<LLC_WAYS; i++)
             {
-                if (!saturated && rrpv[set][i] < maxRRPV-1)
+                if (!saturated && rrpv[set][i] < (maxRRPV-1))
                     rrpv[set][i]++;
             }
         }
