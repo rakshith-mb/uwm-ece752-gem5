@@ -30,7 +30,7 @@ processor = SimpleProcessor(isa=ISA.X86,cpu_type=CPUTypes.O3, num_cores=1)
 # # flag for delaying tainted load
 # processor.cores[0].core.delayTaintedLoad=True
 
-# processor.cores[0].core.max_insts_any_thread=250000000
+ processor.cores[0].core.max_insts_any_thread=250000000
 
 # Add them to the board
 board = SimpleBoard(

@@ -34,7 +34,7 @@ class L1ICache(L1Cache):
         self.size = options.l1i_size
 
 class L1DCache(L1Cache):
-    size = '64kB'
+    size = '32kB'
 
     def connectCPU(self, cpu):
         self.cpu_side = cpu.dcache_port
@@ -46,14 +46,14 @@ class L1DCache(L1Cache):
         self.size = options.l1d_size
 
 class L2Cache(Cache):
-    size = '256kB'
+    size = '32kB'
     assoc = 8
     tag_latency = 20
     data_latency = 20
     response_latency = 20
     mshrs = 20
     tgts_per_mshr = 12
-    replacement_policy = HawkeyeRP()
+    replacement_policy = LRURP()
 
     def connectCPUSideBus(self, bus):
         self.cpu_side = bus.mem_side_ports

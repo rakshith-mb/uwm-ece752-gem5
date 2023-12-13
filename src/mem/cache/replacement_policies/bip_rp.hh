@@ -42,7 +42,7 @@
 #ifndef __MEM_CACHE_REPLACEMENT_POLICIES_BIP_RP_HH__
 #define __MEM_CACHE_REPLACEMENT_POLICIES_BIP_RP_HH__
 
-#include "mem/cache/replacement_policies/lru_rp.hh"
+#include "mem/cache/replacement_policies/new_rp.hh"
 
 namespace gem5
 {

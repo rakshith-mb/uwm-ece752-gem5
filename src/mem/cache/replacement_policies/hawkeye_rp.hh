@@ -33,8 +33,8 @@
  * Wu et al.
  */
 
-#ifndef __MEM_CACHE_REPLACEMENT_POLICIES_SHIP_RP_HH__
-#define __MEM_CACHE_REPLACEMENT_POLICIES_SHIP_RP_HH__
+#ifndef __MEM_CACHE_REPLACEMENT_POLICIES_HAWKEYE_RP_HH__
+#define __MEM_CACHE_REPLACEMENT_POLICIES_HAWKEYE_RP_HH__
 
 #include <cstddef>
 #include <vector>
@@ -212,6 +212,6 @@ class Hawkeye : public Base
 } // namespace replacement_policy
 } // namespace gem5
 
-#endif // __MEM_CACHE_REPLACEMENT_POLICIES_SHIP_RP_HH__
+#endif // __MEM_CACHE_REPLACEMENT_POLICIES_HAWKEYE_RP_HH__
 
 

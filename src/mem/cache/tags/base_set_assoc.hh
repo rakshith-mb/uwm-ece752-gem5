@@ -56,7 +56,7 @@
 #include "mem/cache/base.hh"
 #include "mem/cache/cache_blk.hh"
 #include "mem/cache/replacement_policies/base.hh"
-#include "mem/cache/replacement_policies/hawkeye_rp.hh"
+#include "mem/cache/replacement_policies/new_rp.hh"
 #include "mem/cache/replacement_policies/replaceable_entry.hh"
 #include "mem/cache/tags/base.hh"
 #include "mem/cache/tags/indexing_policies/base.hh"
@@ -146,7 +146,7 @@ class BaseSetAssoc : public BaseTags
             // Update number of references to accessed block
             blk->increaseRefCount();
 
-            if(typeid(replacementPolicy) == typeid(gem5::replacement_policy::Hawkeye))
+            if(typeid(replacementPolicy) == typeid(gem5::replacement_policy::LRU))
             {
                 blk->replacementData->_set = (uint32_t)blk->getSet();
                 blk->replacementData->_way = (uint32_t)blk->getWay();
@@ -211,6 +211,8 @@ class BaseSetAssoc : public BaseTags
         stats.tagsInUse++;
 
         // Update replacement policy
+        blk->replacementData->_set = (uint32_t)blk->getSet();
+        blk->replacementData->_way = (uint32_t)blk->getWay();
         replacementPolicy->reset(blk->replacementData, pkt);
     }
 

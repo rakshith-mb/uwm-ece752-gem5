@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2019, 2020 Inria
+ * Copyright (c) 2018-2020 Inria
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,92 +26,79 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "mem/cache/replacement_policies/hawkeye_rp.hh"
+#include "mem/cache/replacement_policies/new_rp.hh"
 
-#include "base/logging.hh"
-// #include "params/HawkeyeRP.hh"
-#include "params/HawkeyeRP.hh"
+#include <cassert>
+#include <memory>
+#include <math.h>
 
-#define CACHE_HIT   1
-#define CACHE_MISS  0
+#include "params/LRURP.hh"
+#include "sim/cur_tick.hh"
 
-#define DEMAND      8
-#define PREFETCH    9
-#define WRITEBACK   10
-// #define SAMPLED_SET(set) (bits(set, 0 , 6) == bits(set, ((unsigned long long)log2(128) - 6), 6) ) // TO BE FIXED - changed this at 4:24 am with 0 sleep
 
-#define SAMPLED_SET(set) (bits(set, 0 , 6) == bits(set, ((unsigned long long)7 - 6), 6) ) // TO BE FIXED - changed this at 4:24 am with 0 sleep
-int shct_size = 16384;
-int NUM_SETS = 128;
-int NUM_WAYS = 16;
-int numRRPVBits = 64;
-// By default any value greater than 0 is enough to change insertion polic
-int insertion_threshold = 1;
 namespace gem5
 {
 
 namespace replacement_policy
 {
 
-// Hawkeye::HawkeyeReplData::HawkeyeReplData()
-//   : signature(0), valid(false)
-// {
-// }
-
-Hawkeye::SignatureType
-Hawkeye::HawkeyeReplData::getSignature() const
-{
-    return signature;
-}
-
-void
-Hawkeye::HawkeyeReplData::setSignature(SignatureType new_signature)
-{
-    signature = new_signature;
-}
-
-Hawkeye::Hawkeye(const Params &p)
-  : Base(p) , insertionThreshold(insertion_threshold / 100.0),
+LRU::LRU(const Params &p)
+  : Base(p), insertionThreshold(insertion_threshold / 100.0),
     demand_SHCT(shct_size, uint64_t(numRRPVBits)),
-    perset_optgen(NUM_SETS),
-    perset_timer(NUM_SETS,0) // creating NUM_SETS entries with initial value as 0
+    perset_optgen(LLC_SETS),
+    perset_timer(LLC_SETS,0) // creating NUM_SETS entries with initial value as 0
 {
     // We are going to assume that Params has a field called 
     //          1. NUM_SETS which says the total number of sets
     //          2. NUM_WAYS which says the total number of ways
-    for(int i=0;i<NUM_SETS;i++){
-        perset_optgen[i].init(NUM_WAYS-2);
+    for(int i=0;i<LLC_SETS;i++){
+        perset_optgen[i].init(LLC_WAYS-2);
     }
 
     addr_history.resize(SAMPLER_SETS);
     for (int i=0; i<SAMPLER_SETS; i++) 
         addr_history[i].clear();
+
+    // printf("\n\n\nNew RP Constructor is called here \n");
 }
 
-void
-Hawkeye::invalidate(const std::shared_ptr<ReplacementData>& replacement_data)
+LRU::SignatureType
+LRU::LRUReplData::getSignature() const
 {
-    std::shared_ptr<HawkeyeReplData> casted_replacement_data =
-        std::static_pointer_cast<HawkeyeReplData>(replacement_data);
-
-    // // The predictor is detrained when an entry that has not been re-
-    // // referenced since insertion is invalidated
-    // if (casted_replacement_data->wasReReferenced()) {
-    //     SHCT[casted_replacement_data->getSignature()]--;
-    // }
-
-    //BRRIP::invalidate(replacement_data);
-
-    // Invalidate entry
-    casted_replacement_data->valid = false;
+    return signature;
 }
 
 void
-Hawkeye::touch(const std::shared_ptr<ReplacementData>& replacement_data,
+LRU::LRUReplData::setSignature(SignatureType new_signature)
+{
+    signature = new_signature;
+}
+void
+LRU::invalidate(const std::shared_ptr<ReplacementData>& replacement_data)
+{
+    // Reset last touch timestamp
+    std::static_pointer_cast<LRUReplData>(
+        replacement_data)->lastTouchTick = Tick(0);
+    std::static_pointer_cast<LRUReplData>(
+        replacement_data)->valid = false;
+}
+
+void
+LRU::touch(const std::shared_ptr<ReplacementData>& replacement_data) const
+{
+    // Update last touch timestamp
+    std::static_pointer_cast<LRUReplData>(
+        replacement_data)->lastTouchTick = curTick();
+}
+
+void
+LRU::touch(const std::shared_ptr<ReplacementData>& replacement_data,
     const PacketPtr pkt)
 {
-    std::shared_ptr<HawkeyeReplData> casted_replacement_data =
-        std::static_pointer_cast<HawkeyeReplData>(replacement_data);
+    // printf("\n\n\nNew RP touch is called here \n");
+
+    std::shared_ptr<LRUReplData> casted_replacement_data =
+        std::static_pointer_cast<LRUReplData>(replacement_data);
 
     // Get signature
     const SignatureType signature = getSignature(pkt);
@@ -127,26 +114,27 @@ Hawkeye::touch(const std::shared_ptr<ReplacementData>& replacement_data,
 }
 
 void
-Hawkeye::touch(const std::shared_ptr<ReplacementData>& replacement_data)
-    const
+LRU::reset(const std::shared_ptr<ReplacementData>& replacement_data) const
 {
-    panic("Cant train Hawkeye's predictor without access information.");
+    // Set last touch timestamp
+    std::static_pointer_cast<LRUReplData>(
+        replacement_data)->lastTouchTick = curTick();
 }
-
 void
-Hawkeye::reset(const std::shared_ptr<ReplacementData>& replacement_data,
+LRU::reset(const std::shared_ptr<ReplacementData>& replacement_data,
     const PacketPtr pkt)
 {
-    std::shared_ptr<HawkeyeReplData> casted_replacement_data =
-        std::static_pointer_cast<HawkeyeReplData>(replacement_data);
+    std::shared_ptr<LRUReplData> casted_replacement_data =
+        std::static_pointer_cast<LRUReplData>(replacement_data);
 
     // Get signature
     const SignatureType signature = getSignature(pkt);
 
-    // Store signature
+
+    // // Store signature
     casted_replacement_data->setSignature(signature);
 
-    UpdateReplacementState(curr_set, curr_way, pkt->getAddr(), signature, DEMAND, CACHE_MISS);
+    UpdateReplacementState(casted_replacement_data->_set, casted_replacement_data->_way, pkt->getAddr(), signature, DEMAND, CACHE_MISS);
 
     // If SHCT for signature is set, predict intermediate re-reference.
     // Predict distant re-reference otherwise
@@ -155,24 +143,48 @@ Hawkeye::reset(const std::shared_ptr<ReplacementData>& replacement_data,
     //     casted_replacement_data->rrpv--;
     // }
 }
-
-void
-Hawkeye::reset(const std::shared_ptr<ReplacementData>& replacement_data)
-    const
+ReplaceableEntry*
+LRU::getVictim(const ReplacementCandidates& candidates) const
 {
-    panic("Cant train Hawkeye's predictor without access information.");
-}
+    // There must be at least one replacement candidate
+    assert(candidates.size() > 0);
 
-std::shared_ptr<ReplacementData>
-Hawkeye::instantiateEntry()
-{
-    return std::shared_ptr<ReplacementData>(new HawkeyeReplData(numRRPVBits));
-}
+    // Use first candidate as dummy victim
+    ReplaceableEntry* victim = candidates[0];
 
+    // Store victim->rrpv in a variable to improve code readability
+    int victim_RRPV = std::static_pointer_cast<LRUReplData>(
+                        victim->replacementData)->rrpv;
+
+    // Visit all candidates to find victim
+    for (const auto& candidate : candidates) {
+        std::shared_ptr<LRUReplData> candidate_repl_data =
+            std::static_pointer_cast<LRUReplData>(
+                candidate->replacementData);
+
+        // Stop searching for victims if an invalid entry is found
+        if (!candidate_repl_data->valid) {
+            return candidate;
+        }
+        if (candidate_repl_data->rrpv == maxRRPV){
+            victim = candidate;
+            return victim;          
+        }
+
+        // Update victim entry if necessary
+        int candidate_RRPV = candidate_repl_data->rrpv;
+        if (candidate_RRPV > victim_RRPV) {
+            victim = candidate;
+            victim_RRPV = candidate_RRPV;
+        }
+    }
+
+    return victim;
+}
 // Hashing function to index into demand_SHCT structure- 
 //      see if it is required. 
 //      SHiP does not have any hashing to index into SCHT structure
-uint64_t Hawkeye::CRC( uint64_t _blockAddress )
+uint64_t LRU::CRC( uint64_t _blockAddress )
 {
     static const unsigned long long crcPolynomial = 3988292384ULL;
     unsigned long long _returnVal = _blockAddress;
@@ -180,8 +192,7 @@ uint64_t Hawkeye::CRC( uint64_t _blockAddress )
         _returnVal = ( ( _returnVal & 1 ) == 1 ) ? ( ( _returnVal >> 1 ) ^ crcPolynomial ) : ( _returnVal >> 1 );
     return _returnVal;
 }
-
-void Hawkeye::demand_SHCT_increment (uint64_t pc)
+void LRU::demand_SHCT_increment (uint64_t pc)
 {
     uint64_t signature = CRC(pc) % SHCT_SIZE;
     if (std::find(demand_SHCT.begin(), demand_SHCT.end(), signature) == demand_SHCT.end())
@@ -190,7 +201,7 @@ void Hawkeye::demand_SHCT_increment (uint64_t pc)
     demand_SHCT[signature] = (demand_SHCT[signature] < MAX_SHCT) ? (demand_SHCT[signature]+1) : MAX_SHCT;
 }
 
-void Hawkeye::demand_SHCT_decrement (uint64_t pc)
+void LRU::demand_SHCT_decrement (uint64_t pc)
 {
     uint64_t signature = CRC(pc) % SHCT_SIZE;
     if(std::find(demand_SHCT.begin(), demand_SHCT.end(), signature) == demand_SHCT.end())
@@ -199,16 +210,21 @@ void Hawkeye::demand_SHCT_decrement (uint64_t pc)
         demand_SHCT[signature] = demand_SHCT[signature]-1;
 }
 
-bool Hawkeye::demand_SHCT_get_prediction (uint64_t pc)
+bool LRU::demand_SHCT_get_prediction (uint64_t pc)
 {
     uint64_t signature = CRC(pc) % SHCT_SIZE;
     if(std::find(demand_SHCT.begin(), demand_SHCT.end(), signature) != demand_SHCT.end() && demand_SHCT[signature] < ((MAX_SHCT+1)/2))
         return false;
     return true;
 }
+std::shared_ptr<ReplacementData>
+LRU::instantiateEntry()
+{
+    return std::shared_ptr<ReplacementData>(new LRUReplData());
+}
 
-Hawkeye::SignatureType
-Hawkeye::getSignature(const PacketPtr pkt) const
+LRU::SignatureType
+LRU::getSignature(const PacketPtr pkt) const
 {
     SignatureType signature;
 
@@ -221,7 +237,7 @@ Hawkeye::getSignature(const PacketPtr pkt) const
     return signature % demand_SHCT.size();
 }
 
-void Hawkeye::replace_addr_history_element(unsigned int sampler_set)
+void LRU::replace_addr_history_element(unsigned int sampler_set)
 {
     uint64_t lru_addr = 0;
     
@@ -240,7 +256,7 @@ void Hawkeye::replace_addr_history_element(unsigned int sampler_set)
     addr_history[sampler_set].erase(lru_addr);
 }
 
-void Hawkeye::update_addr_history_lru(unsigned int sampler_set, unsigned int curr_lru)
+void LRU::update_addr_history_lru(unsigned int sampler_set, unsigned int curr_lru)
 {
     for(std::map<uint64_t, ADDR_INFO>::iterator it=addr_history[sampler_set].begin(); it != addr_history[sampler_set].end(); it++)
     {
@@ -252,7 +268,7 @@ void Hawkeye::update_addr_history_lru(unsigned int sampler_set, unsigned int cur
     }
 }
 
-void Hawkeye::set_current_cache_block_data(uint32_t set, uint32_t way)
+void LRU::set_current_cache_block_data(uint32_t set, uint32_t way)
 {
     curr_set = set;
     curr_way = way;
@@ -260,7 +276,7 @@ void Hawkeye::set_current_cache_block_data(uint32_t set, uint32_t way)
 
 
 // called on every cache hit and cache fill
-void Hawkeye::UpdateReplacementState (uint32_t set, uint32_t way, uint64_t paddr, uint64_t PC, uint32_t type, uint8_t hit)
+void LRU::UpdateReplacementState (uint32_t set, uint32_t way, uint64_t paddr, uint64_t PC, uint32_t type, uint8_t hit)
 {
     paddr = (paddr >> 6) << 6;
 
@@ -272,14 +288,14 @@ void Hawkeye::UpdateReplacementState (uint32_t set, uint32_t way, uint64_t paddr
     // else
     //     prefetched[set][way] = false;
 
-    //Ignore writebacks
-    if (type == WRITEBACK)
-        return;
+    // //Ignore writebacks
+    // if (type == WRITEBACK)
+    //     return;
 
 
-    //If we are sampling, OPTgen will only see accesses from sampled sets
+    // //If we are sampling, OPTgen will only see accesses from sampled sets
     if(SAMPLED_SET(set))
-    {
+     {
         //The current timestep 
         uint64_t curr_quanta = perset_timer[set] % OPTGEN_VECTOR_SIZE;  //rsuresh6 the current timestamp - the current index 
 
@@ -288,7 +304,7 @@ void Hawkeye::UpdateReplacementState (uint32_t set, uint32_t way, uint64_t paddr
         assert(sampler_set < SAMPLER_SETS); 
 
         // This line has been used before. Since the right end of a usage interval is always 
-        //a demand, ignore prefetches
+        // a demand, ignore prefetches
         if((addr_history[sampler_set].find(sampler_tag) != addr_history[sampler_set].end()) && (type != PREFETCH))// rsuresh6  will check if sampler_tag is present in the address history - if not present then we cannot 
         {
             unsigned int curr_timer = perset_timer[set];
@@ -315,6 +331,7 @@ void Hawkeye::UpdateReplacementState (uint32_t set, uint32_t way, uint64_t paddr
                     demand_SHCT_decrement(addr_history[sampler_set][sampler_tag].PC);
             }
             //Some maintenance operations for OPTgen
+            assert (set < 2048);
             perset_optgen[set].add_access(curr_quanta);
             update_addr_history_lru(sampler_set, addr_history[sampler_set][sampler_tag].lru);
 
@@ -324,20 +341,20 @@ void Hawkeye::UpdateReplacementState (uint32_t set, uint32_t way, uint64_t paddr
         // This is the first time we are seeing this line (could be demand or prefetch)
         else if(addr_history[sampler_set].find(sampler_tag) == addr_history[sampler_set].end())
         {
-            // Find a victim from the sampled cache if we are sampling
+        //     // Find a victim from the sampled cache if we are sampling
             if(addr_history[sampler_set].size() == SAMPLER_WAYS) 
                 replace_addr_history_element(sampler_set);
 
             assert(addr_history[sampler_set].size() < SAMPLER_WAYS);
             //Initialize a new entry in the sampler
             addr_history[sampler_set][sampler_tag].init(curr_quanta);
-            //If it's a prefetch, mark the prefetched bit;
-            if(type == PREFETCH)
-            {
-                addr_history[sampler_set][sampler_tag].mark_prefetch();
-                perset_optgen[set].add_prefetch(curr_quanta);
-            }
-            else
+        //     //If it's a prefetch, mark the prefetched bit;
+        //     if(type == PREFETCH)
+        //     {
+        //         addr_history[sampler_set][sampler_tag].mark_prefetch();
+        //         perset_optgen[set].add_prefetch(curr_quanta);
+        //     }
+        //     else
                 perset_optgen[set].add_access(curr_quanta);
             update_addr_history_lru(sampler_set, SAMPLER_WAYS-1);
         }
@@ -378,82 +395,33 @@ void Hawkeye::UpdateReplacementState (uint32_t set, uint32_t way, uint64_t paddr
     }
 
     bool new_prediction = demand_SHCT_get_prediction (PC);
-    //if (type == PREFETCH)
-        // new_prediction = prefetch_SHCT.get_prediction (PC);
+    // //if (type == PREFETCH)
+    //     // new_prediction = prefetch_SHCT.get_prediction (PC);
 
     signatures[set][way] = PC;
 
-    //Set RRIP values and age cache-friendly line
-    if(!new_prediction)
-        rrpv[set][way] = maxRRPV;
-    else
-    {
-        rrpv[set][way] = 0;
-        if(!hit)
-        {
-            bool saturated = false;
-            for(uint32_t i=0; i<LLC_WAYS; i++)
-                if (rrpv[set][i] == maxRRPV-1)
-                    saturated = true;
-
-            //Age all the cache-friendly  lines
-            for(uint32_t i=0; i<LLC_WAYS; i++)
-            {
-                if (!saturated && rrpv[set][i] < maxRRPV-1)
-                    rrpv[set][i]++;
-            }
-        }
-        rrpv[set][way] = 0;
-    }
-}
-
-ReplaceableEntry*
-Hawkeye::getVictim(const ReplacementCandidates& candidates) const
-{
-    // There must be at least one replacement candidate
-    assert(candidates.size() > 0);
-
-    // Use first candidate as dummy victim
-    ReplaceableEntry* victim = candidates[0];
-
-    // Store victim->rrpv in a variable to improve code readability
-    int victim_RRPV = std::static_pointer_cast<HawkeyeReplData>(
-                        victim->replacementData)->rrpv;
-
-    // Visit all candidates to find victim
-    for (const auto& candidate : candidates) {
-        std::shared_ptr<HawkeyeReplData> candidate_repl_data =
-            std::static_pointer_cast<HawkeyeReplData>(
-                candidate->replacementData);
-
-        // Stop searching for victims if an invalid entry is found
-        if (!candidate_repl_data->valid) {
-            return candidate;
-        }
-        if (candidate_repl_data->rrpv == maxRRPV){
-            victim = candidate;
-            return victim;          
-        }
-
-        // Update victim entry if necessary
-        int candidate_RRPV = candidate_repl_data->rrpv;
-        if (candidate_RRPV > victim_RRPV) {
-            victim = candidate;
-            victim_RRPV = candidate_RRPV;
-        }
-    }
-
-    // if( SAMPLED_SET(set) )
+    // // //Set RRIP values and age cache-friendly line
+    // if(!new_prediction)
+    //      rrpv[set][way] = maxRRPV;
+    // else
     // {
-    //     // if(prefetched[set][lru_victim])
-    //     //     prefetch_predictor->decrement(signatures[set][lru_victim]);
-    //     // else
-    //         demand_SHCT.demand_SHCT_decrement();
+    //     rrpv[set][way] = 0;
+    //     if(!hit)
+    //     {
+    //         bool saturated = false;
+    //         for(uint32_t i=0; i<LLC_WAYS; i++)
+    //             if (rrpv[set][i] == maxRRPV-1)
+    //                 saturated = true;
+
+    //         //Age all the cache-friendly  lines
+    //         for(uint32_t i=0; i<LLC_WAYS; i++)
+    //         {
+    //             if (!saturated && rrpv[set][i] < maxRRPV-1)
+    //                 rrpv[set][i]++;
+    //         }
+    //     }
+    //     rrpv[set][way] = 0;
     // }
-
-    return victim;
 }
-
-
 } // namespace replacement_policy
 } // namespace gem5

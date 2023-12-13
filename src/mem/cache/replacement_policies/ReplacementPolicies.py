@@ -76,18 +76,12 @@ class LFURP(BaseReplacementPolicy):
 class LRURP(BaseReplacementPolicy):
     type = "LRURP"
     cxx_class = "gem5::replacement_policy::LRU"
-    cxx_header = "mem/cache/replacement_policies/lru_rp.hh"
+    cxx_header = "mem/cache/replacement_policies/new_rp.hh"
+    NUM_SETS = Param.Int(
+        128, "Num sets"
+    )   
 
 
-class BIPRP(LRURP):
-    type = "BIPRP"
-    cxx_class = "gem5::replacement_policy::BIP"
-    cxx_header = "mem/cache/replacement_policies/bip_rp.hh"
-    btp = Param.Percent(3, "Percentage of blocks to be inserted as MRU")
-
-
-class LIPRP(BIPRP):
-    btp = 0
 
 
 class MRURP(BaseReplacementPolicy):
@@ -134,30 +128,7 @@ class NRURP(BRRIPRP):
     btp = 100
     num_bits = 1
 
-class HawkeyeRP(BaseReplacementPolicy):
-    type = "HawkeyeRP"
-    abstract = True
-    cxx_class = "gem5::replacement_policy::Hawkeye"
-    cxx_header = "mem/cache/replacement_policies/hawkeye_rp.hh"
 
-    # shct_size = Param.Int(16384, "Number of SHCT entries")
-    # NUM_SETS = Param.Int(128, "NUM_SETS")
-    # NUM_WAYS = Param.Int(16, "NUM_WAYS")
-    # # # By default any value greater than 0 is enough to change insertion policy
-    # insertion_threshold = Param.Int(
-    #     1, "Percentage at which an entry changes insertion policy"
-    # )
-
-    # shct_size = 16384
-    # NUM_SETS = 128
-    # NUM_WAYS = 16
-    # # By default any value greater than 0 is enough to change insertion policy
-    # insertion_threshold = 1
-
-    # Always make hits mark entries as last to be evicted
-    # hit_priority = True
-    # Let the predictor decide when to change insertion policy
-    # btp = 0
 
 class SHiPRP(BRRIPRP):
     type = "SHiPRP"
