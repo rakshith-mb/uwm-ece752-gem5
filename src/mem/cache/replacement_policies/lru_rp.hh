@@ -28,97 +28,46 @@
 
 /**
  * @file
- * Declaration of a Re-Reference Interval Prediction replacement policy.
- *
- * Not-Recently Used (NRU) is an approximation of LRU that uses a single bit
- * to determine if an entry is going to be re-referenced in the near or distant
- * future.
- *
- * Re-Reference Interval Prediction (RRIP) is an extension of NRU that uses a
- * re-reference prediction value to determine if entries are going to be re-
- * used in the near future or not.
- *
- * The higher the value of the RRPV, the more distant the entry is from its
- * next access.
- *
- * Bimodal Re-Reference Interval Prediction (BRRIP) is an extension of RRIP
- * that has a probability of not inserting entries as the LRU. This probability
- * is controlled by the bimodal throtle parameter (btp).
- *
- * From the original paper, this implementation of RRIP is also called
- * Static RRIP (SRRIP), as it always inserts entries with the same RRPV.
+ * Declaration of a Least Recently Used replacement policy.
+ * The victim is chosen using the last touch timestamp.
  */
 
-#ifndef __MEM_CACHE_REPLACEMENT_POLICIES_BRRIP_RP_HH__
-#define __MEM_CACHE_REPLACEMENT_POLICIES_BRRIP_RP_HH__
+#ifndef __MEM_CACHE_REPLACEMENT_POLICIES_LRU_RP_HH__
+#define __MEM_CACHE_REPLACEMENT_POLICIES_LRU_RP_HH__
 
-#include "base/sat_counter.hh"
 #include "mem/cache/replacement_policies/base.hh"
 
 namespace gem5
 {
 
-struct BRRIPRPParams;
+struct LRURPParams;
 
 namespace replacement_policy
 {
 
-class BRRIP : public Base
+class LRU : public Base
 {
   protected:
-    /** BRRIP-specific implementation of replacement data. */
-    struct BRRIPReplData : ReplacementData
+    /** LRU-specific implementation of replacement data. */
+    struct LRUReplData : ReplacementData
     {
-        /**
-         * Re-Reference Interval Prediction Value.
-         * Some values have specific names (according to the paper):
-         * 0 -> near-immediate re-rereference interval
-         * max_RRPV-1 -> long re-rereference interval
-         * max_RRPV -> distant re-rereference interval
-         */
-        SatCounter8 rrpv;
-
-        /** Whether the entry is valid. */
-        bool valid;
+        /** Tick on which the entry was last touched. */
+        Tick lastTouchTick;
 
         /**
          * Default constructor. Invalidate data.
          */
-        BRRIPReplData(const int num_bits)
-            : rrpv(num_bits), valid(false)
-        {
-        }
+        LRUReplData() : lastTouchTick(0) {}
     };
 
-    /**
-     * Number of RRPV bits. An entry that saturates its RRPV has the longest
-     * possible re-reference interval, that is, it is likely not to be used
-     * in the near future, and is among the best eviction candidates.
-     * A maximum RRPV of 1 implies in a NRU.
-     */
-    const unsigned numRRPVBits;
-
-    /**
-     * The hit priority (HP) policy replaces entries that do not receive cache
-     * hits over any cache entry that receives a hit, while the frequency
-     * priority (FP) policy replaces infrequently re-referenced entries.
-     */
-    const bool hitPriority;
-
-    /**
-     * Bimodal throtle parameter. Value in the range [0,100] used to decide
-     * if a new entry is inserted with long or distant re-reference.
-     */
-    const unsigned btp;
-
   public:
-    typedef BRRIPRPParams Params;
-    BRRIP(const Params &p);
-    ~BRRIP() = default;
+    typedef LRURPParams Params;
+    LRU(const Params &p);
+    ~LRU() = default;
 
     /**
      * Invalidate replacement data to set it as the next probable victim.
-     * Set RRPV as the the most distant re-reference.
+     * Sets its last touch tick as the starting tick.
      *
      * @param replacement_data Replacement data to be invalidated.
      */
@@ -127,6 +76,7 @@ class BRRIP : public Base
 
     /**
      * Touch an entry to update its replacement data.
+     * Sets its last touch tick as the current tick.
      *
      * @param replacement_data Replacement data to be touched.
      */
@@ -135,7 +85,7 @@ class BRRIP : public Base
 
     /**
      * Reset replacement data. Used when an entry is inserted.
-     * Set RRPV according to the insertion policy used.
+     * Sets its last touch tick as the current tick.
      *
      * @param replacement_data Replacement data to be reset.
      */
@@ -143,9 +93,9 @@ class BRRIP : public Base
                                                                      override;
 
     /**
-     * Find replacement victim using rrpv.
+     * Find replacement victim using LRU timestamps.
      *
-     * @param cands Replacement candidates, selected by indexing policy.
+     * @param candidates Replacement candidates, selected by indexing policy.
      * @return Replacement entry to be replaced.
      */
     ReplaceableEntry* getVictim(const ReplacementCandidates& candidates) const
@@ -162,4 +112,4 @@ class BRRIP : public Base
 } // namespace replacement_policy
 } // namespace gem5
 
-#endif // __MEM_CACHE_REPLACEMENT_POLICIES_BRRIP_RP_HH__
+#endif // __MEM_CACHE_REPLACEMENT_POLICIES_LRU_RP_HH__

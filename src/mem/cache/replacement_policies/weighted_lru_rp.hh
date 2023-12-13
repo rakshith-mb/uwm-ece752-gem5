@@ -35,7 +35,7 @@
 #include <memory>
 
 #include "base/types.hh"
-#include "mem/cache/replacement_policies/new_rp.hh"
+#include "mem/cache/replacement_policies/lru_rp.hh"
 
 namespace gem5
 {

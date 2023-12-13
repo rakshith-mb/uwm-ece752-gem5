@@ -76,13 +76,10 @@ class LFURP(BaseReplacementPolicy):
 class LRURP(BaseReplacementPolicy):
     type = "LRURP"
     cxx_class = "gem5::replacement_policy::LRU"
-    cxx_header = "mem/cache/replacement_policies/new_rp.hh"
-    NUM_SETS = Param.Int(
-        128, "Num sets"
-    )   
-
-
-
+    cxx_header = "mem/cache/replacement_policies/lru_rp.hh"
+    # NUM_SETS = Param.Int(
+    #     128, "Num sets"
+    # )   
 
 class MRURP(BaseReplacementPolicy):
     type = "MRURP"
@@ -99,64 +96,64 @@ class RandomRP(BaseReplacementPolicy):
 class BRRIPRP(BaseReplacementPolicy):
     type = "BRRIPRP"
     cxx_class = "gem5::replacement_policy::BRRIP"
-    cxx_header = "mem/cache/replacement_policies/brrip_rp.hh"
+    cxx_header = "mem/cache/replacement_policies/new_rp.hh"
     num_bits = Param.Int(2, "Number of bits per RRPV")
-    hit_priority = Param.Bool(
-        False, "Prioritize evicting blocks that havent had a hit recently"
-    )
-    btp = Param.Percent(
-        3, "Percentage of blocks to be inserted with long RRPV"
-    )
+    # hit_priority = Param.Bool(
+    #     False, "Prioritize evicting blocks that havent had a hit recently"
+    # )
+    # btp = Param.Percent(
+    #     3, "Percentage of blocks to be inserted with long RRPV"
+    # )
 
 
-class RRIPRP(BRRIPRP):
-    btp = 100
+# class RRIPRP(BRRIPRP):
+#     btp = 100
 
 
-class DRRIPRP(DuelingRP):
-    # The constituency_size and the team_size must be manually provided, where:
-    #     constituency_size = num_cache_entries /
-    #         (num_dueling_sets * num_entries_per_set)
-    # The paper assumes that:
-    #     num_dueling_sets = 32
-    #     team_size = num_entries_per_set
-    replacement_policy_a = BRRIPRP()
-    replacement_policy_b = RRIPRP()
+# class DRRIPRP(DuelingRP):
+#     # The constituency_size and the team_size must be manually provided, where:
+#     #     constituency_size = num_cache_entries /
+#     #         (num_dueling_sets * num_entries_per_set)
+#     # The paper assumes that:
+#     #     num_dueling_sets = 32
+#     #     team_size = num_entries_per_set
+#     replacement_policy_a = BRRIPRP()
+#     replacement_policy_b = RRIPRP()
 
 
-class NRURP(BRRIPRP):
-    btp = 100
-    num_bits = 1
+# class NRURP(BRRIPRP):
+#     btp = 100
+    # num_bits = 1
 
 
 
-class SHiPRP(BRRIPRP):
-    type = "SHiPRP"
-    abstract = True
-    cxx_class = "gem5::replacement_policy::SHiP"
-    cxx_header = "mem/cache/replacement_policies/ship_rp.hh"
+# class SHiPRP(BRRIPRP):
+#     type = "SHiPRP"
+#     abstract = True
+#     cxx_class = "gem5::replacement_policy::SHiP"
+#     cxx_header = "mem/cache/replacement_policies/ship_rp.hh"
 
-    shct_size = Param.Unsigned(16384, "Number of SHCT entries")
-    # By default any value greater than 0 is enough to change insertion policy
-    insertion_threshold = Param.Percent(
-        1, "Percentage at which an entry changes insertion policy"
-    )
-    # Always make hits mark entries as last to be evicted
-    hit_priority = True
-    # Let the predictor decide when to change insertion policy
-    btp = 0
-
-
-class SHiPMemRP(SHiPRP):
-    type = "SHiPMemRP"
-    cxx_class = "gem5::replacement_policy::SHiPMem"
-    cxx_header = "mem/cache/replacement_policies/ship_rp.hh"
+#     shct_size = Param.Unsigned(16384, "Number of SHCT entries")
+#     # By default any value greater than 0 is enough to change insertion policy
+#     insertion_threshold = Param.Percent(
+#         1, "Percentage at which an entry changes insertion policy"
+#     )
+#     # Always make hits mark entries as last to be evicted
+#     hit_priority = True
+#     # Let the predictor decide when to change insertion policy
+#     btp = 0
 
 
-class SHiPPCRP(SHiPRP):
-    type = "SHiPPCRP"
-    cxx_class = "gem5::replacement_policy::SHiPPC"
-    cxx_header = "mem/cache/replacement_policies/ship_rp.hh"
+# class SHiPMemRP(SHiPRP):
+#     type = "SHiPMemRP"
+#     cxx_class = "gem5::replacement_policy::SHiPMem"
+#     cxx_header = "mem/cache/replacement_policies/ship_rp.hh"
+
+
+# class SHiPPCRP(SHiPRP):
+#     type = "SHiPPCRP"
+#     cxx_class = "gem5::replacement_policy::SHiPPC"
+#     cxx_header = "mem/cache/replacement_policies/ship_rp.hh"
 
 
 class TreePLRURP(BaseReplacementPolicy):

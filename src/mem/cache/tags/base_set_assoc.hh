@@ -146,7 +146,7 @@ class BaseSetAssoc : public BaseTags
             // Update number of references to accessed block
             blk->increaseRefCount();
 
-            if(typeid(replacementPolicy) == typeid(gem5::replacement_policy::LRU))
+            if(typeid(replacementPolicy) == typeid(gem5::replacement_policy::BRRIP))
             {
                 blk->replacementData->_set = (uint32_t)blk->getSet();
                 blk->replacementData->_way = (uint32_t)blk->getWay();

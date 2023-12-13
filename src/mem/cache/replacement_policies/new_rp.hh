@@ -32,14 +32,14 @@
  * The victim is chosen using the last touch timestamp.
  */
 
-#ifndef __MEM_CACHE_REPLACEMENT_POLICIES_LRU_RP_HH__
-#define __MEM_CACHE_REPLACEMENT_POLICIES_LRU_RP_HH__
+#ifndef __MEM_CACHE_REPLACEMENT_POLICIES_BRRIP_RP_HH__
+#define __MEM_CACHE_REPLACEMENT_POLICIES_BRRIP_RP_HH__
 
 #include "mem/cache/replacement_policies/base.hh"
 #include "optgen.h"
 // defines Hawkeye
 #define MAX_SHCT 31
-#define SHCT_SIZE_BITS 13 
+#define SHCT_SIZE_BITS 11
 #define SHCT_SIZE (1<<SHCT_SIZE_BITS)
 #define TIMER_SIZE 1024
 #define maxRRPV 7
@@ -73,18 +73,18 @@
 namespace gem5
 {
 
-struct LRURPParams;
+struct BRRIPRPParams;
 
 namespace replacement_policy
 {
 
-class LRU : public Base
+class BRRIP : public Base
 {
   typedef std::size_t SignatureType;
 
   protected:
-    /** LRU-specific implementation of replacement data. */
-    struct LRUReplData : ReplacementData
+    /** BRRIP-specific implementation of replacement data. */
+    struct BRRIPReplData : ReplacementData
     {
         /** Tick on which the entry was last touched. */
         Tick lastTouchTick;
@@ -95,7 +95,7 @@ class LRU : public Base
         /**
          * Default constructor. Invalidate data.
          */
-        LRUReplData() : lastTouchTick(0),signature(0), valid(false), rrpv(64) {}
+        BRRIPReplData() : lastTouchTick(0),signature(0), valid(false), rrpv(64) {}
 
         /** Get entry's signature. */
         SignatureType getSignature() const;
@@ -109,9 +109,9 @@ class LRU : public Base
     };
 
   public:
-    typedef LRURPParams Params;
-    LRU(const Params &p);
-    ~LRU() = default;
+    typedef BRRIPRPParams Params;
+    BRRIP(const Params &p);
+    ~BRRIP() = default;
     const double insertionThreshold;
     std::vector<uint64_t> demand_SHCT;
     std::vector<uint64_t> prefetch_SHCT;
@@ -155,7 +155,7 @@ class LRU : public Base
     void reset(const std::shared_ptr<ReplacementData>& replacement_data,
         const PacketPtr pkt) override;
     /**
-     * Find replacement victim using LRU timestamps.
+     * Find replacement victim using BRRIP timestamps.
      *
      * @param candidates Replacement candidates, selected by indexing policy.
      * @return Replacement entry to be replaced.
@@ -191,4 +191,4 @@ class LRU : public Base
 } // namespace replacement_policy
 } // namespace gem5
 
-#endif // __MEM_CACHE_REPLACEMENT_POLICIES_LRU_RP_HH__
+#endif // __MEM_CACHE_REPLACEMENT_POLICIES_BRRIP_RP_HH__

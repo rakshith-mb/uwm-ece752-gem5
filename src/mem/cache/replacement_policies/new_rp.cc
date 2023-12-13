@@ -32,7 +32,7 @@
 #include <memory>
 #include <math.h>
 
-#include "params/LRURP.hh"
+#include "params/BRRIPRP.hh"
 #include "sim/cur_tick.hh"
 
 
@@ -42,7 +42,7 @@ namespace gem5
 namespace replacement_policy
 {
 
-LRU::LRU(const Params &p)
+BRRIP::BRRIP(const Params &p)
   : Base(p), insertionThreshold(insertion_threshold / 100.0),
     demand_SHCT(shct_size, uint64_t(numRRPVBits)),
     perset_optgen(LLC_SETS),
@@ -62,43 +62,43 @@ LRU::LRU(const Params &p)
     // printf("\n\n\nNew RP Constructor is called here \n");
 }
 
-LRU::SignatureType
-LRU::LRUReplData::getSignature() const
+BRRIP::SignatureType
+BRRIP::BRRIPReplData::getSignature() const
 {
     return signature;
 }
 
 void
-LRU::LRUReplData::setSignature(SignatureType new_signature)
+BRRIP::BRRIPReplData::setSignature(SignatureType new_signature)
 {
     signature = new_signature;
 }
 void
-LRU::invalidate(const std::shared_ptr<ReplacementData>& replacement_data)
+BRRIP::invalidate(const std::shared_ptr<ReplacementData>& replacement_data)
 {
     // Reset last touch timestamp
-    std::static_pointer_cast<LRUReplData>(
+    std::static_pointer_cast<BRRIPReplData>(
         replacement_data)->lastTouchTick = Tick(0);
-    std::static_pointer_cast<LRUReplData>(
+    std::static_pointer_cast<BRRIPReplData>(
         replacement_data)->valid = false;
 }
 
 void
-LRU::touch(const std::shared_ptr<ReplacementData>& replacement_data) const
+BRRIP::touch(const std::shared_ptr<ReplacementData>& replacement_data) const
 {
     // Update last touch timestamp
-    std::static_pointer_cast<LRUReplData>(
+    std::static_pointer_cast<BRRIPReplData>(
         replacement_data)->lastTouchTick = curTick();
 }
 
 void
-LRU::touch(const std::shared_ptr<ReplacementData>& replacement_data,
+BRRIP::touch(const std::shared_ptr<ReplacementData>& replacement_data,
     const PacketPtr pkt)
 {
     // printf("\n\n\nNew RP touch is called here \n");
 
-    std::shared_ptr<LRUReplData> casted_replacement_data =
-        std::static_pointer_cast<LRUReplData>(replacement_data);
+    std::shared_ptr<BRRIPReplData> casted_replacement_data =
+        std::static_pointer_cast<BRRIPReplData>(replacement_data);
 
     // Get signature
     const SignatureType signature = getSignature(pkt);
@@ -114,18 +114,18 @@ LRU::touch(const std::shared_ptr<ReplacementData>& replacement_data,
 }
 
 void
-LRU::reset(const std::shared_ptr<ReplacementData>& replacement_data) const
+BRRIP::reset(const std::shared_ptr<ReplacementData>& replacement_data) const
 {
     // Set last touch timestamp
-    std::static_pointer_cast<LRUReplData>(
+    std::static_pointer_cast<BRRIPReplData>(
         replacement_data)->lastTouchTick = curTick();
 }
 void
-LRU::reset(const std::shared_ptr<ReplacementData>& replacement_data,
+BRRIP::reset(const std::shared_ptr<ReplacementData>& replacement_data,
     const PacketPtr pkt)
 {
-    std::shared_ptr<LRUReplData> casted_replacement_data =
-        std::static_pointer_cast<LRUReplData>(replacement_data);
+    std::shared_ptr<BRRIPReplData> casted_replacement_data =
+        std::static_pointer_cast<BRRIPReplData>(replacement_data);
 
     // Get signature
     const SignatureType signature = getSignature(pkt);
@@ -144,7 +144,7 @@ LRU::reset(const std::shared_ptr<ReplacementData>& replacement_data,
     // }
 }
 ReplaceableEntry*
-LRU::getVictim(const ReplacementCandidates& candidates) const
+BRRIP::getVictim(const ReplacementCandidates& candidates) const
 {
     // There must be at least one replacement candidate
     assert(candidates.size() > 0);
@@ -153,13 +153,13 @@ LRU::getVictim(const ReplacementCandidates& candidates) const
     ReplaceableEntry* victim = candidates[0];
 
     // Store victim->rrpv in a variable to improve code readability
-    int victim_RRPV = std::static_pointer_cast<LRUReplData>(
+    int victim_RRPV = std::static_pointer_cast<BRRIPReplData>(
                         victim->replacementData)->rrpv;
 
     // Visit all candidates to find victim
     for (const auto& candidate : candidates) {
-        std::shared_ptr<LRUReplData> candidate_repl_data =
-            std::static_pointer_cast<LRUReplData>(
+        std::shared_ptr<BRRIPReplData> candidate_repl_data =
+            std::static_pointer_cast<BRRIPReplData>(
                 candidate->replacementData);
 
         // Stop searching for victims if an invalid entry is found
@@ -184,7 +184,7 @@ LRU::getVictim(const ReplacementCandidates& candidates) const
 // Hashing function to index into demand_SHCT structure- 
 //      see if it is required. 
 //      SHiP does not have any hashing to index into SCHT structure
-uint64_t LRU::CRC( uint64_t _blockAddress )
+uint64_t BRRIP::CRC( uint64_t _blockAddress )
 {
     static const unsigned long long crcPolynomial = 3988292384ULL;
     unsigned long long _returnVal = _blockAddress;
@@ -192,7 +192,7 @@ uint64_t LRU::CRC( uint64_t _blockAddress )
         _returnVal = ( ( _returnVal & 1 ) == 1 ) ? ( ( _returnVal >> 1 ) ^ crcPolynomial ) : ( _returnVal >> 1 );
     return _returnVal;
 }
-void LRU::demand_SHCT_increment (uint64_t pc)
+void BRRIP::demand_SHCT_increment (uint64_t pc)
 {
     uint64_t signature = CRC(pc) % SHCT_SIZE;
     if (std::find(demand_SHCT.begin(), demand_SHCT.end(), signature) == demand_SHCT.end())
@@ -201,7 +201,7 @@ void LRU::demand_SHCT_increment (uint64_t pc)
     demand_SHCT[signature] = (demand_SHCT[signature] < MAX_SHCT) ? (demand_SHCT[signature]+1) : MAX_SHCT;
 }
 
-void LRU::demand_SHCT_decrement (uint64_t pc)
+void BRRIP::demand_SHCT_decrement (uint64_t pc)
 {
     uint64_t signature = CRC(pc) % SHCT_SIZE;
     if(std::find(demand_SHCT.begin(), demand_SHCT.end(), signature) == demand_SHCT.end())
@@ -210,7 +210,7 @@ void LRU::demand_SHCT_decrement (uint64_t pc)
         demand_SHCT[signature] = demand_SHCT[signature]-1;
 }
 
-bool LRU::demand_SHCT_get_prediction (uint64_t pc)
+bool BRRIP::demand_SHCT_get_prediction (uint64_t pc)
 {
     uint64_t signature = CRC(pc) % SHCT_SIZE;
     if(std::find(demand_SHCT.begin(), demand_SHCT.end(), signature) != demand_SHCT.end() && demand_SHCT[signature] < ((MAX_SHCT+1)/2))
@@ -218,13 +218,13 @@ bool LRU::demand_SHCT_get_prediction (uint64_t pc)
     return true;
 }
 std::shared_ptr<ReplacementData>
-LRU::instantiateEntry()
+BRRIP::instantiateEntry()
 {
-    return std::shared_ptr<ReplacementData>(new LRUReplData());
+    return std::shared_ptr<ReplacementData>(new BRRIPReplData());
 }
 
-LRU::SignatureType
-LRU::getSignature(const PacketPtr pkt) const
+BRRIP::SignatureType
+BRRIP::getSignature(const PacketPtr pkt) const
 {
     SignatureType signature;
 
@@ -237,7 +237,7 @@ LRU::getSignature(const PacketPtr pkt) const
     return signature % demand_SHCT.size();
 }
 
-void LRU::replace_addr_history_element(unsigned int sampler_set)
+void BRRIP::replace_addr_history_element(unsigned int sampler_set)
 {
     uint64_t lru_addr = 0;
     
@@ -256,7 +256,7 @@ void LRU::replace_addr_history_element(unsigned int sampler_set)
     addr_history[sampler_set].erase(lru_addr);
 }
 
-void LRU::update_addr_history_lru(unsigned int sampler_set, unsigned int curr_lru)
+void BRRIP::update_addr_history_lru(unsigned int sampler_set, unsigned int curr_lru)
 {
     for(std::map<uint64_t, ADDR_INFO>::iterator it=addr_history[sampler_set].begin(); it != addr_history[sampler_set].end(); it++)
     {
@@ -268,7 +268,7 @@ void LRU::update_addr_history_lru(unsigned int sampler_set, unsigned int curr_lr
     }
 }
 
-void LRU::set_current_cache_block_data(uint32_t set, uint32_t way)
+void BRRIP::set_current_cache_block_data(uint32_t set, uint32_t way)
 {
     curr_set = set;
     curr_way = way;
@@ -276,7 +276,7 @@ void LRU::set_current_cache_block_data(uint32_t set, uint32_t way)
 
 
 // called on every cache hit and cache fill
-void LRU::UpdateReplacementState (uint32_t set, uint32_t way, uint64_t paddr, uint64_t PC, uint32_t type, uint8_t hit)
+void BRRIP::UpdateReplacementState (uint32_t set, uint32_t way, uint64_t paddr, uint64_t PC, uint32_t type, uint8_t hit)
 {
     paddr = (paddr >> 6) << 6;
 
