@@ -91,7 +91,7 @@ class BaseCache(ClockedObject):
     response_latency = Param.Cycles("Latency for the return path on a miss")
 
     warmup_percentage = Param.Percent(
-        0, "Percentage of tags to be touched to warm up the cache"
+        100, "Percentage of tags to be touched to warm up the cache"
     )
 
     max_miss_count = Param.Counter(

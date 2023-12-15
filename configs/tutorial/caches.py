@@ -3,6 +3,7 @@ from m5.params import *
 from m5.objects.ReplacementPolicies import *
 
 class L1Cache(Cache):
+    # Default values for L1 cache. Uses the dafult LRU policy for cache replacement
     assoc = 8
     tag_latency = 2
     data_latency = 2
@@ -46,6 +47,7 @@ class L1DCache(L1Cache):
         self.size = options.l1d_size
 
 class L2Cache(Cache):
+    # Default values for L1 cache. Uses Hawkeye for cache replacement
     size = '2MB'
     assoc = 16
     tag_latency = 20

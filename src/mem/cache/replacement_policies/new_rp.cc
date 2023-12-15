@@ -43,9 +43,10 @@ namespace replacement_policy
 
 BRRIP::BRRIP(const Params &p)
   : Base(p), insertionThreshold(insertion_threshold / 100.0),
-    //demand_SHCT(shct_size, uint64_t(numRRPVBits)),
+
     perset_optgen(LLC_SETS),
-    perset_timer(LLC_SETS,0) // creating NUM_SETS entries with initial value as 0
+    // creating NUM_SETS entries with initial value as 0
+    perset_timer(LLC_SETS,0)
 {
     // We are going to assume that Params has a field called 
     //          1. NUM_SETS which says the total number of sets
@@ -57,53 +58,40 @@ BRRIP::BRRIP(const Params &p)
     addr_history.resize(SAMPLER_SETS);
     for (int i=0; i<SAMPLER_SETS; i++) 
         addr_history[i].clear();
-    // DPRINTF(BRIP_D, "Constructor called here\n");
-    // printf("\n\n\nNew RP Constructor is called here \n");
 }
 
 void
 BRRIP::invalidate(const std::shared_ptr<ReplacementData>& replacement_data)
 {
     // Reset last touch timestamp
-    // std::static_pointer_cast<BRRIPReplData>(
-    //     replacement_data)->valid = false;
-    // DPRINTF(BRIP_D, "Invalidate function called here\n");
-
+    std::static_pointer_cast<BRRIPReplData>(
+        replacement_data)->valid = false;
 }
 
 void
 BRRIP::touch(const std::shared_ptr<ReplacementData>& replacement_data) const
 {
-    // Update last touch timestamp
 }
 
 void
 BRRIP::touch(const std::shared_ptr<ReplacementData>& replacement_data,
     const PacketPtr pkt)
 {
-    // printf("\n\n\nNew RP touch is called here \n");
-
     std::shared_ptr<BRRIPReplData> casted_replacement_data =
         std::static_pointer_cast<BRRIPReplData>(replacement_data);
 
-    // Get signature
+    // Get PC value of the memory instruction
     uint64_t PC = (uint64_t) getSignature(pkt);
-    // DPRINTF(BRIP_D, "Touch function called here %llx ; set = %d way = %d \n", PC,replacement_data->_set, replacement_data->_way);
-    // When a hit happens the SHCT entry indexed by the signature is
-    // incremented
-    // SHCT[signature]++;
 
+    // touch() is called on a cache hit. So, call UpdateReplacementState() with CACHE_HIT as argument
     UpdateReplacementState(replacement_data->_set, replacement_data->_way, pkt->getAddr(), PC, DEMAND, CACHE_HIT);
-
-    // // This was a hit; update replacement data accordingly
-    // BRRIP::touch(replacement_data);
 }
 
 void
 BRRIP::reset(const std::shared_ptr<ReplacementData>& replacement_data) const
 {
-    // Set last touch timestamp
 }
+
 void
 BRRIP::reset(const std::shared_ptr<ReplacementData>& replacement_data,
     const PacketPtr pkt)
@@ -111,19 +99,16 @@ BRRIP::reset(const std::shared_ptr<ReplacementData>& replacement_data,
     std::shared_ptr<BRRIPReplData> casted_replacement_data =
         std::static_pointer_cast<BRRIPReplData>(replacement_data);
 
-    // Get signature
+    // Entry brought in. Set the valid bit to be true.
+    casted_replacement_data->valid = true;
+
+    // Get PC value of the memory instruction
     uint64_t PC = (uint64_t) (pkt);
-    // DPRINTF(BRIP_D, "Reset function called here %llx ; set = %d way = %d \n", PC,replacement_data->_set, replacement_data->_way);
+
+    // reset() is called on a cache miss. So, call UpdateReplacementState() with CACHE_MISS as argument
     UpdateReplacementState(casted_replacement_data->_set, casted_replacement_data->_way, pkt->getAddr(), PC, DEMAND, CACHE_MISS);
-
-    // If SHCT for signature is set, predict intermediate re-reference.
-    // Predict distant re-reference otherwise
-    // BRRIP::reset(replacement_data);
-    // if (SHCT[signature].calcSaturation() >=  ) {
-    //     casted_replacement_data->rrpv--;
-    // }
-
 }
+
 ReplaceableEntry*
 BRRIP::getVictim(const ReplacementCandidates& candidates) const
 {
@@ -134,13 +119,11 @@ BRRIP::getVictim(const ReplacementCandidates& candidates) const
     ReplaceableEntry* victim = candidates[0];
 
     // Store victim->rrpv in a variable to improve code readability
-    // int victim_RRPV = std::static_pointer_cast<BRRIPReplData>(
-                        // victim->replacementData)->rrpv;
-
     int victim_RRPV = rrpv[victim->getSet()][victim->getWay()];
 
     // Visit all candidates to find victim
-    for (const auto& candidate : candidates) {
+    for (const auto& candidate : candidates) 
+    {
         std::shared_ptr<BRRIPReplData> candidate_repl_data =
             std::static_pointer_cast<BRRIPReplData>(
                 candidate->replacementData);
@@ -148,12 +131,14 @@ BRRIP::getVictim(const ReplacementCandidates& candidates) const
         int candidate_RRPV = rrpv[candidate->getSet()][candidate->getWay()];
 
         // Stop searching for victims if an invalid entry is found
-        // if (!candidate_repl_data->valid) {
-        //     return candidate;
-        // }
+        if (!candidate_repl_data->valid) {
+            return candidate;
+        }
+
+        // Jump to decrementing SHCT if we find an entry with maximum RRPV
         if (candidate_RRPV == maxRRPV){
             victim = candidate;
-            return victim;      // BUG - Cannot return here - have to decrement the SHCT     
+            break;     // BUG - Cannot return here - have to decrement the SHCT     
         }
 
         // Update victim entry if necessary
@@ -162,28 +147,27 @@ BRRIP::getVictim(const ReplacementCandidates& candidates) const
             victim_RRPV = candidate_RRPV;
         }
     }
-    // printf("\nget Victim function called here victim rrpv = %llx ; set = %d way = %d \n", victim_RRPV, victim->getSet(), victim->getWay());
+
+    // Decrement SHCT
     if( SAMPLED_SET(victim->getSet()) )
     {
-        // if(prefetched[victim->getSet()][victim->getWay()])
-        //     prefetch_predictor->decrement(signatures[victim->getSet()][victim->getWay()]);
-        // else
-            const_cast<BRRIP*>(this)->demand_SHCT_decrement(signatures[victim->getSet()][victim->getWay()]);
+        const_cast<BRRIP*>(this)->demand_SHCT_decrement(signatures[victim->getSet()][victim->getWay()]);
     }
 
     return victim;
 }
+
 // Hashing function to index into demand_SHCT structure- 
-//      see if it is required. 
-//      SHiP does not have any hashing to index into SCHT structure
 uint64_t BRRIP::CRC( uint64_t _blockAddress )
 {
-    static const unsigned long long crcPolynomial = 3988292384ULL;
+    static const unsigned long long crcPolynomial = 3988292384ULL; // CRC Polynomial
     unsigned long long _returnVal = _blockAddress;
     for( unsigned int i = 0; i < 32; i++ )
         _returnVal = ( ( _returnVal & 1 ) == 1 ) ? ( ( _returnVal >> 1 ) ^ crcPolynomial ) : ( _returnVal >> 1 );
     return _returnVal;
 }
+
+// Function to increment the SHCT
 void BRRIP::demand_SHCT_increment (uint64_t pc)
 {
     uint64_t signature = CRC(pc) % SHCT_SIZE;
@@ -191,9 +175,9 @@ void BRRIP::demand_SHCT_increment (uint64_t pc)
         demand_SHCT[signature] = (1+MAX_SHCT)/2;
 
     demand_SHCT[signature] = (demand_SHCT[signature] < MAX_SHCT) ? (demand_SHCT[signature]+1) : MAX_SHCT;
-
 }
 
+// Function to decrement the SHCT
 void BRRIP::demand_SHCT_decrement (uint64_t pc)
 {
     uint64_t signature = CRC(pc) % SHCT_SIZE;
@@ -203,6 +187,7 @@ void BRRIP::demand_SHCT_decrement (uint64_t pc)
         demand_SHCT[signature] = demand_SHCT[signature]-1;
 }
 
+// If MSB of the SHCT entry is 1 then false. Else true
 bool BRRIP::demand_SHCT_get_prediction (uint64_t pc)
 {
     uint64_t signature = CRC(pc) % SHCT_SIZE;
@@ -210,12 +195,14 @@ bool BRRIP::demand_SHCT_get_prediction (uint64_t pc)
         return false;
     return true;
 }
+
 std::shared_ptr<ReplacementData>
 BRRIP::instantiateEntry()
 {
     return std::shared_ptr<ReplacementData>(new BRRIPReplData());
 }
 
+// Get PC of the instruction through the packet
 BRRIP::SignatureType
 BRRIP::getSignature(const PacketPtr pkt) const
 {
@@ -226,15 +213,10 @@ BRRIP::getSignature(const PacketPtr pkt) const
     } else {
         signature = (SignatureType)0;
     }
-
-    // if(demand_SHCT.size())
-    //     return signature % SHCT_SIZE;
-    // else
-
-    // printf("\nSignature - %ld\n", signature);
     return signature;
 }
 
+// 
 void BRRIP::replace_addr_history_element(unsigned int sampler_set)
 {
     uint64_t lru_addr = 0;
@@ -266,62 +248,45 @@ void BRRIP::update_addr_history_lru(unsigned int sampler_set, unsigned int curr_
     }
 }
 
-// called on every cache hit and cache fill
+// Called on every cache hit and cache fill
 void BRRIP::UpdateReplacementState (uint32_t set, uint32_t way, uint64_t paddr, uint64_t PC, uint32_t type, uint8_t hit)
 {
+    // Address of the memory location accessed
     paddr = (paddr >> 6) << 6;
 
-    // if(type == PREFETCH)
-    // {
-    //     if (!hit)
-    //         prefetched[set][way] = true;
-    // }
-    // else
-    //     prefetched[set][way] = false;
-
-    // //Ignore writebacks
-    // if (type == WRITEBACK)
-    //     return;
-
-
-    // //If we are sampling, OPTgen will only see accesses from sampled sets
+    // If we are sampling, OPTgen will only see accesses from sampled sets
     if(SAMPLED_SET(set))
      {
-        //The current timestep 
-        uint64_t curr_quanta = perset_timer[set] % OPTGEN_VECTOR_SIZE;  //rsuresh6 the current timestamp - the current index 
+        // The current timestep 
+        uint64_t curr_quanta = perset_timer[set] % OPTGEN_VECTOR_SIZE;
 
-        uint32_t sampler_set = (paddr >> 6) % SAMPLER_SETS;  // rsuresh6  will give which set we need to look at 
+        // The set that we need to look at
+        uint32_t sampler_set = (paddr >> 6) % SAMPLER_SETS;
+        // The tag of the address
         uint64_t sampler_tag = CRC(paddr >> 12) % 256;       // rsuresh6  tag of the address
         assert(sampler_set < SAMPLER_SETS); 
 
         // This line has been used before. Since the right end of a usage interval is always 
         // a demand, ignore prefetches
-        if((addr_history[sampler_set].find(sampler_tag) != addr_history[sampler_set].end()) && (type != PREFETCH))// rsuresh6  will check if sampler_tag is present in the address history - if not present then we cannot 
+        // Check if the tag exists in the address history
+        if((addr_history[sampler_set].find(sampler_tag) != addr_history[sampler_set].end()) && (type != PREFETCH))
         {
-
             unsigned int curr_timer = perset_timer[set];
+            // Check for timestamp overflow
             if(curr_timer < addr_history[sampler_set][sampler_tag].last_quanta)
                curr_timer = curr_timer + TIMER_SIZE;
             bool wrap =  ((curr_timer - addr_history[sampler_set][sampler_tag].last_quanta) > OPTGEN_VECTOR_SIZE);
             uint64_t last_quanta = addr_history[sampler_set][sampler_tag].last_quanta % OPTGEN_VECTOR_SIZE;
-            // DPRINTF(BRIP_D, "UpdateReplacementState function called here victim curr_quanta = %d ; set = %d way = %d last_quanta = %ld \n", curr_quanta, sampler_set, sampler_tag, last_quanta);
-            //and for prefetch hits, we train the last prefetch trigger PC
+
+            // If there is a wraparound consider as misses. If not, and if it should be cached, increment SHCT
             if( !wrap && perset_optgen[set].should_cache(curr_quanta, last_quanta))
             {
-                // if(addr_history[sampler_set][sampler_tag].prefetched)
-                //     // prefetch_SHCT.increment(addr_history[sampler_set][sampler_tag].PC);
-                //     ;
-                // else
-                    demand_SHCT_increment(addr_history[sampler_set][sampler_tag].PC);
+                demand_SHCT_increment(addr_history[sampler_set][sampler_tag].PC);
             }
             else
             {
                 //Train the predictor negatively because OPT would not have cached this line
-                // if(addr_history[sampler_set][sampler_tag].prefetched)
-                //     // prefetch_SHCT.decrement(addr_history[sampler_set][sampler_tag].PC);
-                //     ;
-                // else
-                    demand_SHCT_decrement(addr_history[sampler_set][sampler_tag].PC);
+                demand_SHCT_decrement(addr_history[sampler_set][sampler_tag].PC);
             }
             //Some maintenance operations for OPTgen
             assert (set < 2048);

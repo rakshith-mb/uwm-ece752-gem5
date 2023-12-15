@@ -3,9 +3,9 @@ from m5.objects import *
 from caches import *
 import argparse
 from m5.stats import initSimStats
-# from gem5.resources.resources import *
-# from gem5.resources.workload import *
 
+
+# Parse the arguments passed. Also assign default arguments
 parser = argparse.ArgumentParser(description='A simple system with 2-level cache.')
 parser.add_argument("binary", default="/filespace/r/rsuresh6/ece752/project/new/uwm-ece752-gem5/gcc/gcc_base.x86_64_sse", nargs="?", type=str,
                   help="Path to the binary to execute.")
@@ -53,10 +53,11 @@ system.cpu.interrupts[0].pio = system.membus.mem_side_ports
 system.cpu.interrupts[0].int_requestor = system.membus.cpu_side_ports
 system.cpu.interrupts[0].int_responder = system.membus.mem_side_ports
 
-# added 
+# Maximum number of instructions to be run
 system.cpu.max_insts_any_thread = 250000000
 
-system.cpu.warmup_percentage = 20
+# Parameter to warmup the cache
+# system.cpu.warmup_percentage = 20
 
 system.system_port = system.membus.cpu_side_ports
 
@@ -70,6 +71,7 @@ system.workload = SEWorkload.init_compatible(options.binary)
 process = Process()
 process.cmd = [options.binary]
 
+# Changes to pass arguments to the binary
 arg = "/filespace/r/rsuresh6/ece752/project/new/uwm-ece752-gem5/gcc/input/scilab.i -o sci.o"
 process.cmd += arg.split()
 
@@ -85,6 +87,4 @@ exit_event = m5.simulate()
 print('Exiting @ tick {} because {}'
       .format(m5.curTick(), exit_event.getCause()))
 
-
 print('************************************')
-# m5.stats.printStats()
