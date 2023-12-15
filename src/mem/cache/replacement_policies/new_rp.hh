@@ -67,9 +67,7 @@
 #define DEMAND      8
 #define PREFETCH    9
 #define WRITEBACK   10
-// #define shct_size 16384
-// #define numRRPVBits 64
-#define  insertion_threshold 1
+#define INSERTION_THRESHOLD 1
 
 namespace gem5
 {
@@ -87,16 +85,13 @@ class BRRIP : public Base
     /** BRRIP-specific implementation of replacement data. */
     struct BRRIPReplData : ReplacementData
     {
-        /** Tick on which the entry was last touched. */
-
+        // To check if the entry id valid or not
         bool valid;
         /**
          * Default constructor. Invalidate data.
          */
-        BRRIPReplData() {
-          
+        BRRIPReplData() {     
         }
-
     };
 
   public:
@@ -104,6 +99,7 @@ class BRRIP : public Base
     BRRIP(const Params &p);
     ~BRRIP() = default;
     const double insertionThreshold;
+    // Structure to store the SHCT values (predictions)
     std::map<uint64_t, uint32_t> demand_SHCT;
     std::map<uint64_t, uint32_t> prefetch_SHCT;
   
@@ -112,7 +108,9 @@ class BRRIP : public Base
     std::vector<uint64_t>                   perset_timer;  //holds the timestamp of access in a per set basis
     std::vector<std::map<uint64_t, ADDR_INFO> >  addr_history;  //addr_history is an array tag and ADDR_INFO. It is a part of the sampled cache design
 
+    // Structure to save the PC of the block
     uint64_t signatures[LLC_SETS][LLC_WAYS];
+    // Structure to save the RRPV values
     uint32_t rrpv[LLC_SETS][LLC_WAYS];
 
     /**
@@ -159,23 +157,26 @@ class BRRIP : public Base
      * @return A shared pointer to the new replacement data.
      */
     std::shared_ptr<ReplacementData> instantiateEntry() override;
-    // increments the trainer Signature indexed counter value
+
+    // increments the trainer PC indexed counter value
     void demand_SHCT_increment (uint64_t pc) ;
 
-    // decrement the trainer Signature indexed counter value
+    // decrement the trainer PC indexed counter value
     void demand_SHCT_decrement (uint64_t pc);
 
-    // gets the prediction from the counter value indexed through the signature
+    // gets the prediction from the counter value indexed through the PC
     bool demand_SHCT_get_prediction (uint64_t pc);
 
+    // Returns the PC of the memory access instruction
     SignatureType getSignature(const PacketPtr pkt) const;
 
+    // To update the state based on the cache block access
     void UpdateReplacementState (uint32_t set, uint32_t way, uint64_t paddr, uint64_t PC, uint32_t type, uint8_t hit);
 
+    // Functions to update the LRU entry of the addr_history. Helper functions to decide which
+    // addr_history element needs to be removed
     void replace_addr_history_element(unsigned int sampler_set);
     void update_addr_history_lru(unsigned int sampler_set, unsigned int curr_lru);
-
-    void set_current_cache_block_data(uint32_t set, uint32_t way);
 };
 
 } // namespace replacement_policy

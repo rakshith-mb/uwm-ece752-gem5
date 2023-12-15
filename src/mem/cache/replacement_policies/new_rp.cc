@@ -42,7 +42,7 @@ namespace replacement_policy
 {
 
 BRRIP::BRRIP(const Params &p)
-  : Base(p), insertionThreshold(insertion_threshold / 100.0),
+  : Base(p), insertionThreshold(INSERTION_THRESHOLD / 100.0),
 
     perset_optgen(LLC_SETS),
     // creating NUM_SETS entries with initial value as 0
@@ -285,12 +285,14 @@ void BRRIP::UpdateReplacementState (uint32_t set, uint32_t way, uint64_t paddr, 
             }
             else
             {
-                //Train the predictor negatively because OPT would not have cached this line
+                // Train the predictor negatively because OPT would not have cached this line
                 demand_SHCT_decrement(addr_history[sampler_set][sampler_tag].PC);
             }
-            //Some maintenance operations for OPTgen
+
+            // Some maintenance operations for OPTgen
             assert (set < 2048);
             perset_optgen[set].add_access(curr_quanta);
+
             update_addr_history_lru(sampler_set, addr_history[sampler_set][sampler_tag].lru);
 
             //Since this was a demand access, mark the prefetched bit as false
@@ -299,73 +301,62 @@ void BRRIP::UpdateReplacementState (uint32_t set, uint32_t way, uint64_t paddr, 
         // This is the first time we are seeing this line (could be demand or prefetch)
         else if(addr_history[sampler_set].find(sampler_tag) == addr_history[sampler_set].end())
         {
-        //     // Find a victim from the sampled cache if we are sampling
+            // Find a victim from the sampled cache if we are sampling
             if(addr_history[sampler_set].size() == SAMPLER_WAYS) 
                 replace_addr_history_element(sampler_set);
 
             assert(addr_history[sampler_set].size() < SAMPLER_WAYS);
-            //Initialize a new entry in the sampler
+            // Initialize a new entry in the sampler
             addr_history[sampler_set][sampler_tag].init(curr_quanta);
-        //     //If it's a prefetch, mark the prefetched bit;
-        //     if(type == PREFETCH)
-        //     {
-        //         addr_history[sampler_set][sampler_tag].mark_prefetch();
-        //         perset_optgen[set].add_prefetch(curr_quanta);
-        //     }
-        //     else
                 perset_optgen[set].add_access(curr_quanta);
             update_addr_history_lru(sampler_set, SAMPLER_WAYS-1);
         }
-        else //This line is a prefetch
+        else // This line is a prefetch
         {
             assert(addr_history[sampler_set].find(sampler_tag) != addr_history[sampler_set].end());
-            //if(hit && prefetched[set][way])
+            
             uint64_t last_quanta = addr_history[sampler_set][sampler_tag].last_quanta % OPTGEN_VECTOR_SIZE;
             if (perset_timer[set] - addr_history[sampler_set][sampler_tag].last_quanta < 5*NUM_CORE) 
             {
                 if(perset_optgen[set].should_cache(curr_quanta, last_quanta))
                 {
-                    // if(addr_history[sampler_set][sampler_tag].prefetched)
-                    //     // prefetch_SHCT.increment(addr_history[sampler_set][sampler_tag].PC);
-                    //     ;
-                    // else
-                       demand_SHCT_increment(addr_history[sampler_set][sampler_tag].PC);
+                    demand_SHCT_increment(addr_history[sampler_set][sampler_tag].PC);
                 }
             }
 
-            //Mark the prefetched bit
+            // Mark the prefetched bit
             addr_history[sampler_set][sampler_tag].mark_prefetch(); 
-            //Some maintenance operations for OPTgen
+            // Some maintenance operations for OPTgen
             perset_optgen[set].add_prefetch(curr_quanta);
             update_addr_history_lru(sampler_set, addr_history[sampler_set][sampler_tag].lru);
         }
 
         // Get Hawkeye's prediction for this line
         bool new_prediction = demand_SHCT_get_prediction (PC);
-        //if (type == PREFETCH)
-            // new_prediction = prefetch_SHCT.get_prediction (PC);
+
         // Update the sampler with the timestamp, PC and our prediction
         // For prefetches, the PC will represent the trigger PC
         addr_history[sampler_set][sampler_tag].update(perset_timer[set], PC, new_prediction);
         addr_history[sampler_set][sampler_tag].lru = 0;
-        //Increment the set timer
+        // Increment the set timer
         perset_timer[set] = (perset_timer[set]+1) % TIMER_SIZE;
     }
 
     bool new_prediction = demand_SHCT_get_prediction (PC);
-    // //if (type == PREFETCH)
-    //     // new_prediction = prefetch_SHCT.get_prediction (PC);
 
     signatures[set][way] = PC;
 
-    // //Set RRIP values and age cache-friendly line
+    // Set RRIP values and age cache-friendly line
     if(!new_prediction)
-         rrpv[set][way] = maxRRPV;
+        // Cache averse
+        rrpv[set][way] = maxRRPV;
     else
     {
+        // Cache friendly
         rrpv[set][way] = 0;
         if(!hit)
         {
+            // Cache miss. Therefore age all the lines
             bool saturated = false;
             for(uint32_t i=0; i<LLC_WAYS; i++)
                 if (rrpv[set][i] == (maxRRPV-1))

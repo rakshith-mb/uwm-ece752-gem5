@@ -179,9 +179,6 @@ class BaseSetAssoc : public BaseTags
                          const std::size_t size,
                          std::vector<CacheBlk*>& evict_blks) override
     {
-
-        CacheBlk *blk = findBlock(addr, is_secure);
-
         // Get possible entries to be victimized
         const std::vector<ReplaceableEntry*> entries =
             indexingPolicy->getPossibleEntries(addr);
